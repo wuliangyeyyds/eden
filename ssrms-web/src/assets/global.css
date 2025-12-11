@@ -1,0 +1,12 @@
+/* 全局重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* body 样式 */
+body {
+    font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background-color: #f5f7fb;
+}
