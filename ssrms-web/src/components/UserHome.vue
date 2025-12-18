@@ -50,37 +50,34 @@
             </div>
           </div>
 
-          <!-- 第二行：今日自习室概况（左） + 本月学习简报（右） -->
           <div class="home-row-two">
-            <!-- 左：今日自习室概况 -->
             <div class="home-panel home-overview">
               <div class="home-panel-header">
                 <div class="home-panel-title">今日自习室概况</div>
               </div>
               <div class="home-panel-body home-overview-body">
                 <div class="home-overview-line">
-                  <div class="home-panel-number">180 个座位</div>
+                  <div class="home-panel-number">{{ todayOverview.totalSeats }} 个座位</div>
                   <div class="home-panel-desc">
-                    已预约 72 · 正在使用 58 · 剩余 50
+                    已预约 {{ todayOverview.reservedCount }} · 正在使用 {{ todayOverview.inUseCount }} · 剩余 {{ todayOverview.remainingCount }}
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- 右：本月学习简报 -->
             <div class="month-report">
               <div class="report-title">本月学习简报</div>
               <div class="report-row">
                 <span>本月累计预约</span>
-                <span><strong>12</strong> 次</span>
+                <span><strong>{{ monthBrief.monthReserveCount }}</strong> 次</span>
               </div>
               <div class="report-row">
                 <span>本月累计自习时长</span>
-                <span><strong>28</strong> 小时</span>
+                <span><strong>{{ monthStudyHours }}</strong> 小时</span>
               </div>
               <div class="report-row">
                 <span>最近一次到馆</span>
-                <span>昨天 19:10</span>
+                <span>{{ monthBrief.lastVisitTime || '-' }}</span>
               </div>
             </div>
           </div>
@@ -204,7 +201,7 @@
           <div class="reserve-header-left">
             <h2 class="page-title">我要预约</h2>
             <p class="page-subtitle">
-              选择自习室、日期和时间段进行预约，点击卡片选择 / 取消，最多可同时选择 4 个时段。
+              选择校区、建筑、教室、日期与时间段，并选择座位号进行预约。
             </p>
           </div>
 
@@ -215,7 +212,7 @@
               <div class="summary-row">
                 <span class="summary-label">场地</span>
                 <span class="summary-value">
-              {{ currentVenueName }}
+              {{ currentRoomFullName || '请选择场地' }}
             </span>
               </div>
               <div class="summary-row">
@@ -225,46 +222,78 @@
             </span>
               </div>
               <div class="summary-row">
-                <span class="summary-label">时段</span>
-                <span
-                    class="summary-value"
-                    v-if="selectedSlots.length"
-                >
-              已选 {{ selectedSlots.length }} / 4 个
+                <span class="summary-label">时间</span>
+                <span class="summary-value" v-if="selectedTimeText">
+              {{ selectedTimeText }}
             </span>
-                <span
-                    class="summary-value summary-empty"
-                    v-else
-                >
-              尚未选择
+                <span class="summary-value summary-empty" v-else>尚未选择</span>
+              </div>
+
+              <div class="summary-row">
+                <span class="summary-label">座位</span>
+                <span class="summary-value" v-if="selectedSeatNo">
+              {{ selectedSeatNo }}
             </span>
+                <span class="summary-value summary-empty" v-else>尚未选择</span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 场地选择 + “只看可预约”开关 -->
+        <!-- 场地（校区/建筑/教室） + 时间（开始/结束） -->
         <div class="reserve-toolbar">
-          <div class="venue-tabs">
-            <button
-                v-for="(venue, index) in reserveVenues"
-                :key="venue"
-                type="button"
-                class="venue-tab"
-                :class="{ active: reserveVenueIndex === index }"
-                @click="handleVenueClick(index)"
-            >
-              {{ venue }}
-            </button>
+          <div class="reserve-control short">
+            <select class="reserve-select" v-model="selectedCampus" @change="onCampusChange">
+              <option value="" disabled>选择校区</option>
+              <option v-for="c in campusOptions" :key="c" :value="c">{{ c }}</option>
+            </select>
           </div>
 
-          <div class="reserve-toolbar-right">
-            <span class="switch-label">只看可预约时段</span>
-            <!-- Element Plus 的开关组件 -->
-            <el-switch
-                v-model="onlyShowAvailable"
-                size="small"
-            />
+          <div class="reserve-control short">
+            <select
+                class="reserve-select"
+                v-model="selectedBuilding"
+                :disabled="!selectedCampus"
+                @change="onBuildingChange"
+            >
+              <option value="" disabled>选择建筑</option>
+              <option v-for="b in buildingOptions" :key="b" :value="b">{{ b }}</option>
+            </select>
+          </div>
+
+          <div class="reserve-control short">
+            <select
+                class="reserve-select"
+                v-model.number="selectedRoomId"
+                :disabled="!selectedBuilding"
+                @change="onRoomChange"
+            >
+              <option :value="null" disabled>选择教室</option>
+              <option v-for="r in roomOptions" :key="r.id" :value="r.id">{{ r.roomName }}</option>
+            </select>
+          </div>
+
+          <div class="reserve-control long">
+            <select class="reserve-select" v-model.number="startHour" @change="handleStartHourChange">
+              <option :value="null" disabled>开始时间</option>
+              <option v-for="h in startHourOptions" :key="h" :value="h">{{ pad2(h) }}:00</option>
+            </select>
+          </div>
+
+          <div class="reserve-control long">
+            <select
+                class="reserve-select"
+                v-model.number="endHour"
+                :disabled="startHour == null"
+                @change="handleEndHourChange"
+            >
+              <option :value="null" disabled>结束时间</option>
+              <option v-for="h in endHourOptions" :key="h" :value="h">{{ pad2(h) }}:00</option>
+            </select>
+          </div>
+
+          <div class="reserve-warning" v-if="rangeHasConflict">
+            所选时间段包含不可预约时段
           </div>
         </div>
 
@@ -308,10 +337,10 @@
           </button>
         </div>
 
-        <!-- 时间段选择区域 -->
+        <!-- 座位号选择区域 -->
         <div class="slot-section">
           <div class="slot-header">
-            <div class="slot-title">选择时间段</div>
+            <div class="slot-title">选择座位号</div>
             <div class="slot-legend">
           <span class="legend-item">
             <span class="legend-dot legend-available"></span>可预约
@@ -327,47 +356,46 @@
 
           <div class="slot-grid">
             <button
-                v-for="slot in filteredTimeSlots"
-                :key="slot.id"
+                v-for="seat in seatList"
+                :key="seat"
                 type="button"
                 class="slot-item"
-                :class="slotClass(slot)"
-                :disabled="slotState(slot) === 'disabled'"
-                @click="toggleSlot(slot)"
+                :class="seatClass(seat)"
+                :disabled="seatState(seat) === 'disabled'"
+                @click="toggleSeat(seat)"
             >
-              <span class="slot-time">{{ slot.label }}</span>
-              <span class="slot-range">{{ slot.range }}</span>
+              <span class="slot-time">{{ seat }}</span>
+              <span class="slot-range">座位</span>
             </button>
           </div>
         </div>
 
         <!-- 已选时段 + 提交区域 -->
         <div class="reserve-bottom">
-          <div class="selected-tags" v-if="selectedSlots.length">
+          <div class="selected-tags" v-if="tempReservations.length">
             <div
-                v-for="item in selectedSlots"
-                :key="item.key"
                 class="selected-tag"
+                v-for="(item, idx) in tempReservations"
+                :key="item.key"
             >
-          <span class="selected-tag-text">
-            {{ item.dateLabel }} · {{ currentVenueName }} · {{ item.slot.range }}
-          </span>
+              <span class="selected-tag-text">{{ item.label }}</span>
               <button
                   type="button"
                   class="selected-tag-close"
-                  @click="removeSelected(item.key)"
+                  @click="removeTempReservation(idx)"
               >
                 ×
               </button>
             </div>
           </div>
 
+
           <div class="reserve-actions">
             <button
                 type="button"
                 class="link-btn"
-                v-if="selectedSlots.length"
-                @click="resetSelections"
+                :disabled="!canClearAll"
+                @click="clearAllSelections"
             >
               清空选择
             </button>
@@ -375,7 +403,16 @@
             <button
                 type="button"
                 class="primary-btn reserve-btn"
-                :disabled="!selectedSlots.length"
+                :disabled="!canAddTempReservation"
+                @click="addTempReservation"
+            >
+              添加
+            </button>
+
+            <button
+                type="button"
+                class="primary-btn reserve-btn"
+                :disabled="!canSubmitReservation"
                 @click="submitReservations"
             >
               确认预约
@@ -383,7 +420,7 @@
           </div>
 
           <p class="hint-text">
-            点击“确认预约”后会弹出当前选择的时段，并跳转到“我的预约”。
+            先点击“添加”将当前选择加入下方列表，最后点击“确认预约”提交，并跳转到“我的预约”。
           </p>
         </div>
       </div>
@@ -393,91 +430,78 @@
     <div v-else-if="currentPage === 'user-reservations'">
       <div class="card card-reservations">
         <h2 class="page-title">预约与签到签退</h2>
+        <!-- 筛选条（在标题和表格之间） -->
+        <div class="res-filter-row">
+          <label class="res-filter">
+            <span class="res-filter-text">查看未签到记录</span>
+            <input class="res-filter-checkbox" type="checkbox" v-model="onlyNoShow" />
+          </label>
+        </div>
         <div class="table-wrapper">
-          <table class="table">
+          <table class="table my-res-table">
             <thead>
             <tr>
-              <th>预约编号</th>
-              <th>自习室</th>
-              <th>日期</th>
-              <th>时间段</th>
-              <th>座位号</th>
-              <th>状态</th>
-              <th style="text-align: right;">操作</th>
+              <th class="col-no">预约编号</th>
+              <th class="col-campus">校区</th>
+              <th class="col-building">建筑</th>
+              <th class="col-room">自习室</th>
+              <th class="col-date">日期</th>
+              <th class="col-time">时间段</th>
+              <th class="col-seat">座位号</th>
+              <th class="col-status">状态</th>
+              <th class="col-actions">操作</th>
             </tr>
             </thead>
+
             <tbody>
-            <tr
-                v-for="item in pagedReservations"
-                :key="item.id"
-            >
-              <td>{{ item.reservationNo }}</td>
-              <td>{{ item.roomName }}</td>
-              <td>{{ item.date }}</td>
-              <td>{{ formatTimeRange(item) }}</td>
-              <td>{{ item.seatLabel || '-' }}</td>
-              <td>
-      <span
-          class="badge"
-          :class="statusClass(item.status)"
-      >
-        {{ renderStatusText(item.status) }}
-      </span>
+            <tr v-for="item in pagedReservations" :key="item.id">
+              <td class="col-no">{{ item.reservationNo }}</td>
+              <td class="col-campus">{{ item.campus || '-' }}</td>
+              <td class="col-building">{{ item.building || '-' }}</td>
+              <td class="col-room">{{ item.roomName || '-' }}</td>
+              <td class="col-date">{{ item.date }}</td>
+              <td class="col-time">{{ formatTimeRange(item) }}</td>
+              <td class="col-seat">{{ item.seatNo || '-' }}</td>
+              <td class="col-status">
+        <span class="badge" :class="statusClass(item.status)">
+          {{ renderStatusText(item.status) }}
+        </span>
               </td>
-              <td class="text-right">
-                <!-- 待签到：可以“签到 / 取消” -->
-                <template v-if="item.status === 'reserved'">
+
+              <!-- 关键：去掉 text-right，别把整列推到最右 -->
+              <td class="col-actions">
+                <div class="actions">
+                  <template v-if="item.status === 'reserved'">
+                    <button class="link-btn" type="button" @click="handleCheckIn(item)">签到</button>
+                    <button class="link-btn link-danger" type="button" :disabled="!canCancel(item)" @click="handleCancel(item)">取消</button>
+                  </template>
+
                   <button
                       class="link-btn"
+                      v-else-if="item.status === 'checked_in' || item.status === 'late'"
                       type="button"
-                      @click="handleCheckIn(item)"
-                  >
-                    签到
-                  </button>
+                      disabled
+                  >已签到</button>
+
                   <button
-                      class="link-btn link-danger"
+                      class="link-btn"
+                      v-else-if="item.status === 'no_show'"
                       type="button"
-                      :disabled="!canCancel(item)"
-                      @click="handleCancel(item)"
-                  >
-                    取消
-                  </button>
-                </template>
+                      disabled
+                  >已过期</button>
 
-                <!-- 已签到 / 迟到 -->
-                <button
-                    class="link-btn"
-                    v-else-if="item.status === 'checked_in' || item.status === 'late'"
-                    type="button"
-                    disabled
-                >
-                  已签到
-                </button>
-
-                <!-- 未签到 -->
-                <button
-                    class="link-btn"
-                    v-else-if="item.status === 'no_show'"
-                    type="button"
-                    disabled
-                >
-                  已过期
-                </button>
-
-                <!-- 已取消 / 逾期取消（都不可再操作） -->
-                <button
-                    class="link-btn"
-                    v-else-if="item.status === 'cancelled' || item.status === 'cancel_overdue'"
-                    type="button"
-                    disabled
-                >
-                  不可操作
-                </button>
+                  <button
+                      class="link-btn"
+                      v-else-if="item.status === 'cancelled' || item.status === 'cancel_overdue'"
+                      type="button"
+                      disabled
+                  >不可操作</button>
+                </div>
               </td>
             </tr>
-            <!-- 没有任何预约时的占位行 -->
-            <tr v-if="!myReservations.length">
-              <td colspan="7" style="text-align: center; color: #9ca3af; padding: 16px 0;">
+
+            <tr v-if="!displayReservations.length">
+              <td colspan="9" style="text-align: center; color: #9ca3af; padding: 16px 0;">
                 暂无预约记录
               </td>
             </tr>
@@ -527,9 +551,7 @@
         <div class="credit-summary">
           <div class="credit-score">
             当前信用分：
-            <span class="score-number">
-          {{ 100 + (myViolations || []).reduce((sum, v) => sum + (v.penaltyScore || 0), 0) }}
-        </span>
+            <span class="score-number">{{ currentCreditScore }}</span>
           </div>
           <p class="hint-text">
             信用分低于 60 可能会被列入黑名单，一段时间内无法预约。
@@ -537,25 +559,33 @@
         </div>
 
         <div class="table-wrapper">
-          <table class="table">
+          <table class="table violation-table">
             <thead>
             <tr>
               <th>日期</th>
+              <th>校区</th>
+              <th>建筑</th>
               <th>自习室</th>
+              <th>座位号</th>
               <th>违规类型</th>
               <th>扣分</th>
               <th>备注</th>
             </tr>
             </thead>
+
             <tbody>
             <tr v-if="!pagedViolations.length">
-              <td colspan="5" style="text-align: center; color: #999;">
+              <td colspan="8" style="text-align: center; color: #999;">
                 暂无违规记录
               </td>
             </tr>
+
             <tr v-for="item in pagedViolations" :key="item.reservationId">
               <td>{{ item.date }}</td>
-              <td>{{ item.roomFullName }}</td>
+              <td>{{ item.campus || '-' }}</td>
+              <td>{{ item.building || '-' }}</td>
+              <td>{{ item.roomName || '-' }}</td>
+              <td>{{ item.seatNo || '-' }}</td>
               <td>{{ item.violationType }}</td>
               <td>{{ item.penaltyScore }}</td>
               <td>{{ item.remark }}</td>
@@ -795,34 +825,51 @@ export default {
     }
   },
   emits: ['change-page'],
+
+  beforeUnmount () {
+    this.stopQuoteTimer()
+  },
+
   data () {
     return {
-      // 场地（地点）列表
-      reserveVenues: ['本部 · 图书馆 301', '本部 · 图书馆 401', '东校区 · 教学楼 3 楼'],
-      reserveVenueIndex: 0,
+      /* ---------------------------
+       * 预约页：校区/建筑/教室 + 开始/结束时间 + 座位号
+       * --------------------------- */
+      // 房间全量（优先从后端拉；拉不到就用前端兜底生成，便于你先把页面跑通）
+      allRooms: [],
+
+      // 下拉选项
+      campusOptions: [],
+      buildingOptions: [],
+      roomOptions: [],
+
+      // 当前选中
+      selectedCampus: '',
+      selectedBuilding: '',
+      selectedRoomId: null,
+
+      // 开始/结束时间（小时）
+      startHour: null,
+      endHour: null,
+
+      // 座位号（01~40）
+      selectedSeatNo: '',
+      disabledSeatNos: [],
+
+      // 临时预约列表（可添加多条，最后统一提交）
+      tempReservations: [],
+      submittingReservations: false,
 
       // 日期相关
       dateList: [],
       visibleStart: 0,
-      visibleCount: 7, // 一屏展示多少天
+      visibleCount: 7,
       currentDateIndex: 0,
-
-      // 时间段列表（0 点~24 点）
-      timeSlots: [],
 
       // 后端返回的“已满时段”（id 列表，例如 [8,9,14]）
       disabledSlotIds: [],
 
-      // 已选时段（最多 4 个）
-      selectedSlots: [],
-
-      // 是否只展示“可预约”的时段
-      onlyShowAvailable: false,
-
-      // 房间 id 映射（按顺序和 reserveVenues 对应）
-      roomIds: [1, 2, 3], // 换成你 room 表里的真实 id
-
-      // 当前登录用户 id（从登录时存的用户信息里读）
+      // 当前登录用户 id
       currentUserId: null,
 
       // 我的预约列表
@@ -833,15 +880,15 @@ export default {
       reservationPageIndex: 1,
 
       // 违规记录相关
-      myViolations: [],        // 后端拉回来的完整违规列表
-      violationPageIndex: 1,   // 当前违规页码
+      myViolations: [],
+      violationPageIndex: 1,
       violationPageSize: 15,
 
-      // 个人中心表单数据
+      // 个人中心表单数据（模板里用的是这些字段名，所以这里不改字段名）
       profileForm: {
-        name: '',          // 姓名
-        account: '',       // 登录账号
-        studentNo: '',     // 学号
+        name: '',
+        account: '',
+        studentNo: '',
         college: '',
         gradeClass: '',
         phone: '',
@@ -853,11 +900,13 @@ export default {
       profileSaving: false,
 
       // 首页 - 天气、金句、快捷反馈
-      weatherData: null,       // 天气数据对象
-      dailyQuote: '',          // 今日一句话
-      openFeedback: false,     // 右下角快捷评价浮层是否打开
+      weatherData: null,
+      dailyQuote: '',
+      dailyQuoteId: null,
+      quoteTimer: null,
+      openFeedback: false,
 
-      // 首页 - 公告列表示例数据（后续可以接 /notice 接口替换）
+      // 首页 - 公告列表示例数据
       homeNotices: [
         {
           id: 1,
@@ -885,41 +934,25 @@ export default {
         }
       ],
 
-      // 放一个函数在 data 里也没问题，模板中可以直接调用
-      emojiWeather: function (desc) {
-        if (!desc) return '⛅'
-        if (desc.includes('雨')) return '🌧️'
-        if (desc.includes('云')) return '⛅'
-        if (desc.includes('晴')) return '☀️'
-        if (desc.includes('雪')) return '❄️'
-        return '⛅'
+      onlyNoShow: false,
+
+      currentCreditScore: 100,
+
+      todayOverview: {
+        totalSeats: 24000,
+        reservedCount: 0,
+        inUseCount: 0,
+        remainingCount: 24000
+      },
+      monthBrief: {
+        monthReserveCount: 0,
+        studyMinutes: 0,
+        lastVisitTime: null
       },
 
-      // 首页底部的随机一句话
-      quotes: [
-        '代码写完要多测试，bug 总会在你最不想看到它的时候出现。',
-        '保持自律的最好方式，就是给自己定一个很清晰、很小但能做到的目标。',
-        '信用记录就像存钱罐，一点一滴都在改变别人对你的信任度。',
-        '早点到教室，晚点离开，安静的自习室会给你额外的安全感。',
-        '学习是场马拉松，保持节奏比短时间爆发更重要。',
-        '不想学的时候，先坐下来学五分钟，很多坚持都是从这五分钟开始的。',
-        '记不住是很正常的事，多写几遍、多讲几遍，大脑才知道这东西很重要。',
-        '能在自习室刷手机，就一定能在自习室刷完一套题，选哪个看你自己。',
-        '今天偷的懒，都会在考试周加倍还回来。',
-        '别总羡慕别人自律，其实他们只是一次次按下了「继续做」而不是「算了吧」。',
-        '看不懂的题先标记，不要卡死在一个地方，一道题拖垮一晚上太亏了。',
-        '复习最大的骗局，是「我好像都看过」；真正有用的是「这题我能当场写出来」。',
-        '熬夜是把信用卡，透支的是精神和身体，迟早要还的。',
-        '专注一小时，胜过边刷手机边学习三小时。',
-        '自习室不是用来躺平的地方，是用来慢慢把焦虑变成底气的地方。',
-        '再晚也比不开始好，再小的进步也是在往前走。',
-        '今天多坐十分钟，期末就少一点「背水一战」的紧张。',
-        '你以为记不住的知识，其实只是还没复习到第二遍、第三遍。',
-        '迟到一次没什么，但习惯迟到会慢慢把所有计划都打乱。',
-        '把「明天再说」改成「现在先做一点」，很多事就不会堆成山。'
-      ],
     }
   },
+
   computed: {
     visibleDates () {
       return this.dateList
@@ -935,46 +968,121 @@ export default {
     canMoveNext () {
       return this.visibleStart + this.visibleCount < this.dateList.length
     },
-    currentVenueName () {
-      return this.reserveVenues[this.reserveVenueIndex] || ''
+    currentRoomId () {
+      return this.selectedRoomId
     },
-    // 当前选中的日期完整文本（用于右侧概要）
+    currentRoomFullName () {
+      const room = this.allRooms.find(r => Number(r.id) === Number(this.selectedRoomId))
+      if (!room) return ''
+      return `${room.campus} · ${room.building} ${room.roomName}`
+    },
     currentDateLabel () {
       const cur = this.dateList[this.currentDateIndex]
       return cur ? cur.fullLabel : ''
     },
-    // 根据开关过滤时间段列表
-    filteredTimeSlots () {
-      if (!this.onlyShowAvailable) {
-        return this.timeSlots
-      }
-      // 只展示“可预约”的时段
-      return this.timeSlots.filter(slot => this.slotState(slot) === 'available')
-    },
-    // 当前房间 id
-    currentRoomId () {
-      return this.roomIds[this.reserveVenueIndex]
-    },
-    // 后端需要 yyyy-MM-dd 格式的日期字符串
     currentDateStr () {
       const cur = this.dateList[this.currentDateIndex]
-      // 我们在 initDates 里已经生成了 fullLabel = '2025-12-13'
       return cur ? cur.fullLabel : null
     },
-    // 总页数
-    totalPages () {
-      if (!this.myReservations.length) return 0
-      return Math.ceil(this.myReservations.length / this.pageSize)
+
+    // 开始时间：08~22；结束时间：09~23（且必须 > startHour）
+    startHourOptions () {
+      const arr = []
+      for (let h = 8; h <= 22; h++) arr.push(h)
+      return arr
     },
-    // 当前页要展示的 15 条
+    endHourOptions () {
+      if (this.startHour == null) return []
+      const arr = []
+      const maxEnd = Math.min(23, this.startHour + 4)   // ✅最多4小时
+      for (let h = this.startHour + 1; h <= maxEnd; h++) arr.push(h)
+      return arr
+    },
+    selectedTimeText () {
+      if (this.startHour == null || this.endHour == null) return ''
+      return `${this.pad2(this.startHour)}:00 - ${this.pad2(this.endHour)}:00`
+    },
+    selectedSlotIdsFromRange () {
+      if (this.startHour == null || this.endHour == null) return []
+      const ids = []
+      for (let h = this.startHour; h < this.endHour; h++) ids.push(h)
+      return ids
+    },
+    rangeHasConflict () {
+      if (!this.disabledSlotIds.length) return false
+      const disabled = new Set(this.disabledSlotIds.map(x => Number(x)))
+      return this.selectedSlotIdsFromRange.some(id => disabled.has(Number(id)))
+    },
+    seatList () {
+      const arr = []
+      for (let i = 1; i <= 80; i++) arr.push(String(i).padStart(2, '0'))
+      return arr
+    },
+    hasAnySelection () {
+      return this.startHour != null || this.endHour != null || !!this.selectedSeatNo
+    },
+    selectionTagText () {
+      if (!this.currentDateLabel && !this.selectedTimeText && !this.selectedSeatNo) return ''
+      const parts = []
+      if (this.currentRoomFullName) parts.push(this.currentRoomFullName)
+      if (this.currentDateLabel) parts.push(this.currentDateLabel)
+      if (this.selectedTimeText) parts.push(this.selectedTimeText)
+      if (this.selectedSeatNo) parts.push(`座位 ${this.selectedSeatNo}`)
+      return parts.join(' · ')
+    },
+    canClearAll () {
+      return this.tempReservations.length > 0
+          || this.startHour != null
+          || this.endHour != null
+          || !!this.selectedSeatNo
+    },
+
+    currentTempKey () {
+      if (!this.currentRoomId || !this.currentDateStr) return ''
+      if (this.startHour == null || this.endHour == null) return ''
+      if (!this.selectedSeatNo) return ''
+      return [
+        this.currentRoomId,
+        this.currentDateStr,
+        this.startHour,
+        this.endHour,
+        this.selectedSeatNo
+      ].join('|')
+    },
+
+    isDuplicateTempReservation () {
+      if (!this.currentTempKey) return false
+      return this.tempReservations.some(x => x.key === this.currentTempKey)
+    },
+
+    canAddTempReservation () {
+      return !!this.currentRoomId
+          && !!this.currentDateStr
+          && this.startHour != null
+          && this.endHour != null
+          && !!this.selectedSeatNo
+          && !this.rangeHasConflict
+          && !this.isDuplicateTempReservation
+          && this.tempReservations.length < 4
+    },
+
+    canSubmitReservation () {
+      return this.tempReservations.length > 0 && !this.submittingReservations
+    },
+
+    totalPages () {
+      if (!this.displayReservations.length) return 0
+      return Math.ceil(this.displayReservations.length / this.pageSize)
+    },
     pagedReservations () {
-      if (!this.myReservations.length) return []
+      if (!this.displayReservations.length) return []
       const total = this.totalPages || 1
       const page = Math.min(this.reservationPageIndex, total)
       const start = (page - 1) * this.pageSize
       const end = start + this.pageSize
-      return this.myReservations.slice(start, end)
+      return this.displayReservations.slice(start, end)
     },
+
     violationTotalPages () {
       if (!this.myViolations.length) return 0
       return Math.ceil(this.myViolations.length / this.violationPageSize)
@@ -987,7 +1095,7 @@ export default {
       const end = start + this.violationPageSize
       return this.myViolations.slice(start, end)
     },
-    // 首页问候：今天日期、星期几、时间段问候语
+
     todayStr () {
       const d = new Date()
       return `${d.getMonth() + 1} 月 ${d.getDate()} 日`
@@ -1003,114 +1111,317 @@ export default {
       if (h < 19) return '下午好'
       return '晚上好'
     },
-    // 新增：我的今日预约（从已加载的 myReservations 中筛选“今天”的记录）
+
     todayAppointments () {
       const list = Array.isArray(this.myReservations) ? this.myReservations : []
       if (!list.length) return []
 
-      const todayStr = new Date().toISOString().slice(0, 10) // yyyy-MM-dd
+      const d = new Date()
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       return list.filter(item => item.date === todayStr)
     },
+
+    displayReservations () {
+      const list = Array.isArray(this.myReservations) ? this.myReservations.slice() : []
+
+      const byDateTimeAsc = (a, b) => {
+        const da = a.date || ''
+        const db = b.date || ''
+        if (da !== db) return da.localeCompare(db)
+
+        const ta = (a.startTime || '').slice(0, 8)
+        const tb = (b.startTime || '').slice(0, 8)
+        if (ta !== tb) return ta.localeCompare(tb)
+
+        return String(a.reservationNo || '').localeCompare(String(b.reservationNo || ''))
+      }
+
+      const norm = s => String(s ?? '').trim().toLowerCase()
+
+      if (this.onlyNoShow) {
+        return list
+            .filter(x => ['reserved', 'no_show'].includes(norm(x.status)))
+            .sort(byDateTimeAsc)
+      }
+
+      // ✅ 不勾选：待签到(reserved) 优先，其次已签到/迟到，再未签到，最后取消类
+      const rank = (st) => {
+        if (st === 'reserved') return 0
+        if (st === 'checked_in' || st === 'late') return 1
+        if (st === 'no_show') return 2
+        return 3
+      }
+
+      return list.sort((a, b) => {
+        const ra = rank(a.status)
+        const rb = rank(b.status)
+        if (ra !== rb) return ra - rb
+        return byDateTimeAsc(a, b)
+      })
+    },
+
+    monthStudyHours () {
+      const mins = Number(this.monthBrief.studyMinutes || 0)
+      const hours = mins / 60
+      return Number.isInteger(hours) ? String(hours) : hours.toFixed(1)
+    },
+
+    lastVisitText () {
+      return this.formatLastVisit(this.monthBrief.lastVisitTime)
+    },
+
   },
+
   created () {
-    // 初始化时间段、日期
-    this.timeSlots = this.buildTimeSlots()
+    // 初始化日期（首页也要用）
     this.initDates()
 
-    // 读取当前登录用户：从 localStorage 的 ssrmsUser 里取
-    const raw = localStorage.getItem('ssrmsUser')
-    if (raw) {
+    // 先读 localStorage（兼容多种字段名）
+    const u0 = this.getStoredUser()
+    if (u0) {
+      this.currentUserId = u0.userId ?? u0.id ?? null
+      this.profileForm = {
+        name: u0.userName || u0.name || '',
+        account: u0.accountNo || u0.account || '',
+        studentNo: u0.accountNo || u0.studentNo || u0.account || '',
+        college: u0.college || '',
+        gradeClass: u0.gradeClass || '',
+        phone: u0.phone || '',
+        email: u0.email || '',
+        commonCampus: u0.commonCampus || '',
+        profileRemark: u0.profileRemark || ''
+      }
+
+      // 再去请求后端拿最新资料覆盖（不会影响模板字段名）
+      this.loadUserProfile()
+    }
+
+    // ✅ 时段占用情况在 initReserveRooms() 里根据默认房间自动拉取
+
+    // 首页也拉一次我的预约（不弹“未签到刷新”的提醒）
+    this.loadMyReservations({ refreshNoShowNotify: false })
+
+    this.loadWeather()
+    this.loadQuoteFromDb()
+    this.loadHomeDashboard()
+  },
+
+  methods: {
+    /* ---------------------------
+     * 统一处理 Axios 返回结构
+     * --------------------------- */
+    normalizeBody (res) {
+      // ✅ 你的 request.js 已经 return response.data
+      // 所以这里拿到的 res 就是后端 JSON（Result）
+      return res
+    },
+    normalizeData (res) {
+      const body = this.normalizeBody(res)
+
+      // ✅ 标准 Result：{code,msg,data,total}
+      if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+        return body.data
+      }
+
+      // 兜底：如果以后某些接口真返回“裸数据”
+      return body
+    },
+    isBizOk (resOrBody) {
+      const body = this.normalizeBody(resOrBody)
+
+      // ✅ 只认 Result.code===200 为成功
+      if (!body || typeof body !== 'object' || !('code' in body)) return false
+      return Number(body.code) === 200
+    },
+    getMsg (resOrBody, fallback = '') {
+      const body = this.normalizeBody(resOrBody)
+      if (!body || typeof body !== 'object') return fallback
+      return body.msg || fallback
+    },
+
+    getUserStorage () {
+      // 优先 localStorage，其次 sessionStorage；都没有就默认 localStorage
+      if (localStorage.getItem('ssrmsUser')) return localStorage
+      if (sessionStorage.getItem('ssrmsUser')) return sessionStorage
+      return localStorage
+    },
+
+    getStoredUser () {
+      const storage = this.getUserStorage()
+      const raw = storage.getItem('ssrmsUser')
+      if (!raw) return null
       try {
-        const user = JSON.parse(raw)
-        console.log('localStorage ssrmsUser = ', user)
-
-        // ⭐ 先把 currentUserId 和表单都用本地数据填上
-        this.currentUserId = user.id  // 如果你登录返回的是 user.userId，这里就改成 user.userId
-
-        this.profileForm = {
-          name: user.name || '',
-          account: user.account || '',          // 登录账号
-          studentNo: user.studentNo || '',      // 学号
-          college: user.college || '',
-          gradeClass: user.gradeClass || '',
-          phone: user.phone || '',
-          email: user.email || '',
-          commonCampus: user.commonCampus || '',
-          profileRemark: user.profileRemark || ''
-        }
-
-        // ⭐ 再去请求后端，拿“最新”的一份覆盖
-        this.loadUserProfile()
+        return JSON.parse(raw)
       } catch (e) {
         console.error('解析 ssrmsUser 失败', e)
+        return null
       }
-    } else {
-      console.warn('localStorage 里没有 ssrmsUser')
-    }
+    },
 
-    // 初始化完后拉一次当前选中日期（“明天”）的占用情况
-    this.fetchSlotStatus()
+    setStoredUser (userObj) {
+      const storage = this.getUserStorage()
+      storage.setItem('ssrmsUser', JSON.stringify(userObj))
+    },
 
-    // 首页相关：天气 & 随机一句话
-    this.loadWeather()
-    if (this.quotes && this.quotes.length) {
-      const idx = Math.floor(Math.random() * this.quotes.length)
-      this.dailyQuote = this.quotes[idx]
-    }
-  },
-  methods: {
+    ensureCurrentUserId () {
+      if (this.currentUserId) return this.currentUserId
+      const u = this.getStoredUser()
+      if (u) {
+        this.currentUserId = u.userId ?? u.id ?? null
+      }
+      return this.currentUserId
+    },
+
     emitChange (page) {
       this.$emit('change-page', page)
     },
 
-    // 点击场地 tab
-    handleVenueClick (index) {
-      this.reserveVenueIndex = index
+    /* ---------------------------
+     * 预约页：房间选项初始化
+     * --------------------------- */
+    async initReserveRooms () {
+      // ✅ 重新进入也刷新一次冲突数据（否则换了日期/教室再回来可能还是旧的）
+      if (this.campusOptions && this.campusOptions.length) {
+        await this.fetchSlotStatus()
+        return
+      }
+
+      // 1) 先尝试从后端拉房间列表（你后端 RoomController 写好后，这里会自动生效）
+      const rooms = await this.loadRoomsFromBackend().catch(() => null)
+
+      // 2) 拉不到就用前端兜底生成（顺序与我们之前的批量插入保持一致，id 从 1 开始）
+      this.allRooms = Array.isArray(rooms) && rooms.length ? rooms : this.buildFallbackRooms()
+
+      // 3) 构建下拉选项，并给一个默认值
+      this.campusOptions = Array.from(new Set(this.allRooms.map(r => r.campus)))
+      this.selectedCampus = this.selectedCampus || (this.campusOptions[0] || '')
+      this.onCampusChange()
+
+      // 默认时间
+      if (this.startHour == null) this.startHour = 8
+      if (this.endHour == null) this.endHour = 9
+
+      // ✅ 默认值就绪后，刷新一次冲突
+      await this.fetchSlotStatus()
+    },
+
+    async loadRoomsFromBackend () {
+      // 兼容你后端未来可能的不同接口命名，尽量“先能跑”
+      const tries = [
+        { url: '/room/list' },
+        { url: '/room/all' },
+      ]
+
+      for (const t of tries) {
+        try {
+          const res = await this.$axios.get(t.url)
+          const data = this.normalizeData(res)
+          if (Array.isArray(data) && data.length) return data
+        } catch (e) {
+          // 继续尝试下一个
+        }
+      }
+      return null
+    },
+
+    buildFallbackRooms () {
+      const campuses = ['本部校区', '东校区', '梅山校区']
+      const buildings = ['图书馆', '1号教学楼', '2号教学楼', '3号教学楼']
+      const rooms = []
+
+      // 101~105, 201~205 ... 501~505
+      const roomNames = []
+      for (let floor = 1; floor <= 5; floor++) {
+        for (let no = 1; no <= 5; no++) {
+          roomNames.push(`${floor}0${no}`)
+        }
+      }
+
+      let id = 1
+      for (const c of campuses) {
+        for (const b of buildings) {
+          for (const rn of roomNames) {
+            rooms.push({
+              id,
+              campus: c,
+              building: b,
+              roomName: rn,
+              totalSeats: 80,
+              openSeats: 80,
+              status: 'open'
+            })
+            id++
+          }
+        }
+      }
+      return rooms
+    },
+
+    onCampusChange () {
+      // 重建 buildingOptions
+      const bs = this.allRooms
+          .filter(r => r.campus === this.selectedCampus)
+          .map(r => r.building)
+      this.buildingOptions = Array.from(new Set(bs))
+
+      if (!this.buildingOptions.includes(this.selectedBuilding)) {
+        this.selectedBuilding = this.buildingOptions[0] || ''
+      }
+
+      this.onBuildingChange()
+    },
+
+    onBuildingChange () {
+      // 重建 roomOptions
+      const list = this.allRooms
+          .filter(r => r.campus === this.selectedCampus && r.building === this.selectedBuilding)
+          .map(r => ({ id: r.id, roomName: r.roomName }))
+
+      this.roomOptions = list
+
+      const ids = list.map(x => Number(x.id))
+      if (!ids.includes(Number(this.selectedRoomId))) {
+        this.selectedRoomId = list.length ? Number(list[0].id) : null
+      }
+
+      // 房间切换后刷新占用时段 & 清空座位（座位占用后端还没接，这里先清空）
+      this.selectedSeatNo = ''
       this.fetchSlotStatus()
     },
 
-    buildTimeSlots () {
-      const list = []
-
-      // 👉 这里控制开放的时间段
-      // startHour：第一个时段的开始小时
-      // endHour：最后一个时段的开始小时
-      // 下面这个例子：从 08:00-09:00 一直到 22:00-23:00
-      const startHour = 8   // 08:00
-      const endHour = 22    // 22:00
-
-      for (let h = startHour; h <= endHour; h++) {
-        const next = h + 1
-        const id = String(h)   // 仍然用小时当作 slotId，和后端保持一致
-
-        const range =
-            `${h.toString().padStart(2, '0')}:00 - ` +
-            `${next.toString().padStart(2, '0')}:00`
-
-        const label =
-            (h % 12 === 0 ? 12 : h % 12) +
-            ': 00 ' +
-            (h < 12 ? 'AM' : 'PM')
-
-        list.push({
-          id,
-          label,
-          range
-        })
-      }
-      return list
+    onRoomChange () {
+      this.selectedSeatNo = ''
+      this.fetchSlotStatus()
     },
 
+    pad2 (n) {
+      return String(n).padStart(2, '0')
+    },
 
+    handleStartHourChange () {
+      if (this.startHour == null) return
+      const maxEnd = Math.min(23, this.startHour + 4)
 
-    // 生成接下来 14 天的日期条（从“明天”开始）
+      if (this.endHour == null || this.endHour <= this.startHour) this.endHour = this.startHour + 1
+      if (this.endHour > maxEnd) this.endHour = maxEnd
+
+      this.fetchSeatConflicts()
+    },
+    handleEndHourChange () {
+      if (this.startHour == null || this.endHour == null) return
+      const maxEnd = Math.min(23, this.startHour + 4)
+      if (this.endHour <= this.startHour) this.endHour = this.startHour + 1
+      if (this.endHour > maxEnd) this.endHour = maxEnd
+
+      this.fetchSeatConflicts()
+    },
+
     initDates () {
       const today = new Date()
       const list = []
       const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
       for (let i = 0; i < 14; i++) {
-        // ⭐ 这里加 1，表示从“明天”开始
         const d = new Date(today)
         d.setDate(d.getDate() + i + 1)
 
@@ -1121,198 +1432,184 @@ export default {
             `${day.toString().padStart(2, '0')}`
 
         list.push({
-          key: i,   // 用 0~13 当 key 就够了
+          key: i,
           year: d.getFullYear(),
           month,
           day,
           weekday: weekdays[d.getDay()],
           monthLabel: `${d.getFullYear()}-${month.toString().padStart(2, '0')}`,
-          isToday: false,        // ⭐ 不再有“今天”
-          isTomorrow: i === 0,   // ⭐ 第一张标记为“明天”
+          isToday: false,
+          isTomorrow: i === 0,
           fullLabel
         })
       }
 
       this.dateList = list
       this.visibleStart = 0
-      this.currentDateIndex = 0   // ⭐ 默认选中第一天（也就是“明天”）
+      this.currentDateIndex = 0
     },
 
     moveDates (direction) {
-      if (direction === 'prev' && this.canMovePrev) {
-        this.visibleStart -= 1
-      } else if (direction === 'next' && this.canMoveNext) {
-        this.visibleStart += 1
-      }
+      if (direction === 'prev' && this.canMovePrev) this.visibleStart -= 1
+      else if (direction === 'next' && this.canMoveNext) this.visibleStart += 1
     },
 
-    // 点击日期
-    selectDate (index) {
+    async selectDate (index) {
       this.currentDateIndex = index
-      this.fetchSlotStatus()
+      await this.fetchSlotStatus()
     },
 
-    buildKey (dateIndex, slotId) {
-      return `${dateIndex}-${slotId}`
+    async fetchSlotStatus () {
+      this.disabledSlotIds = []
+      // 同步刷新座位冲突（用于置灰不可预约座位）
+      await this.fetchSeatConflicts()
     },
 
-    // 当前时段是可预约 / 已选 / 不可预约
-    slotState (slot) {
-      if (this.disabledSlotIds.includes(slot.id)) {
-        return 'disabled'
-      }
-      const key = this.buildKey(this.currentDateIndex, slot.id)
-      const exists = this.selectedSlots.some(item => item.key === key)
-      if (exists) {
-        return 'selected'
-      }
+    /* ---------------------------
+     * 预约页：座位选择
+     * --------------------------- */
+    seatState (seat) {
+      if (this.disabledSeatNos.includes(seat)) return 'disabled'
+      if (this.selectedSeatNo === seat) return 'selected'
       return 'available'
     },
-
-    slotClass (slot) {
-      const state = this.slotState(slot)
+    seatClass (seat) {
+      const state = this.seatState(seat)
       return {
         'slot-available': state === 'available',
         'slot-disabled': state === 'disabled',
         'slot-selected': state === 'selected'
       }
     },
+    toggleSeat (seat) {
+      // 点到冲突座位：不选择，但提示冲突区间
+      if (this.disabledSeatNos.includes(seat)) { return }
 
-    // 点击时段：选中 / 取消
-    toggleSlot (slot) {
-      if (this.slotState(slot) === 'disabled') {
-        return
-      }
-      const key = this.buildKey(this.currentDateIndex, slot.id)
-      const index = this.selectedSlots.findIndex(item => item.key === key)
-      if (index !== -1) {
-        this.selectedSlots.splice(index, 1)
-        return
-      }
-      if (this.selectedSlots.length >= 4) {
-        alert('最多只能选择 4 个预约时段')
-        return
-      }
-      const dateInfo = this.dateList[this.currentDateIndex]
-      const dateLabel = dateInfo.fullLabel
-      this.selectedSlots.push({
-        key,
-        dateIndex: this.currentDateIndex,
-        dateLabel,
-        slot
-      })
-    },
-
-    removeSelected (key) {
-      const index = this.selectedSlots.findIndex(item => item.key === key)
-      if (index !== -1) {
-        this.selectedSlots.splice(index, 1)
-      }
+      // 可选座位：正常选中，并清空提示
+      this.selectedSeatNo = (this.selectedSeatNo === seat) ? '' : seat
     },
 
     resetSelections () {
-      this.selectedSlots = []
+      // 只清空当前“输入框”选择，不影响已添加的临时列表
+      this.startHour = null
+      this.endHour = null
+      this.selectedSeatNo = ''
     },
 
-    // 提交预约：调用后端 /reservation/create
-    async submitReservations () {
-      if (!this.selectedSlots.length) return
+    clearAllSelections () {
+      // 清空当前选择 + 临时列表
+      this.resetSelections()
+      this.tempReservations = []
+    },
 
-      if (!this.currentUserId) {
+    addTempReservation () {
+      if (!this.canAddTempReservation) return
+
+      const room = this.allRooms.find(r => Number(r.id) == Number(this.currentRoomId))
+      const labelParts = []
+      if (room) labelParts.push(`${room.campus} · ${room.building} ${room.roomName}`)
+      if (this.currentDateStr) labelParts.push(this.currentDateStr)
+      if (this.selectedTimeText) labelParts.push(this.selectedTimeText)
+      labelParts.push(`座位 ${this.selectedSeatNo}`)
+
+      const item = {
+        key: this.currentTempKey,
+        roomId: this.currentRoomId,
+        date: this.currentDateStr,
+        startHour: this.startHour,
+        endHour: this.endHour,
+        seatNo: this.selectedSeatNo,
+        label: labelParts.join(' · ')
+      }
+
+      this.tempReservations.push(item)
+      // 添加后按钮会因“重复”而自动变灰（isDuplicateTempReservation）
+    },
+
+    removeTempReservation (idx) {
+      if (idx == null) return
+      this.tempReservations.splice(idx, 1)
+    },
+
+    async submitReservations () {
+      if (!this.canSubmitReservation) return
+      if (!this.ensureCurrentUserId()) {
         alert('请先登录后再预约')
         return
       }
 
-      const slotIds = this.selectedSlots.map(item => Number(item.slot.id))
+      const first = this.tempReservations[0]
 
+      // 后端一次提交只能处理同一 room/date/time 的多个 seatNos
+      const same = this.tempReservations.every(x =>
+          Number(x.roomId) === Number(first.roomId) &&
+          x.date === first.date &&
+          Number(x.startHour) === Number(first.startHour) &&
+          Number(x.endHour) === Number(first.endHour)
+      )
+      if (!same) {
+        alert('请确保临时列表里的预约属于同一教室/日期/时间段（可多选座位），否则请分多次提交。')
+        return
+      }
+
+      const payload = {
+        userId: this.currentUserId,
+        roomId: first.roomId,
+        date: first.date,
+        startTime: `${this.pad2(first.startHour)}:00`,
+        endTime: `${this.pad2(first.endHour)}:00`,
+        seatNos: this.tempReservations.map(x => String(x.seatNo))
+      }
+
+      this.submittingReservations = true
       try {
-        const resp = await this.$axios.post('/reservation/create', {
-          userId: this.currentUserId, // 先直接传，之后可以改成后端从登录态获取
-          roomId: this.currentRoomId,
-          date: this.currentDateStr,
-          slotIds
-        })
+        const res = await this.$axios.post('/reservation/create', payload)
+        const body = this.normalizeBody(res)
 
-        const result = resp.data
-        if (result.code && result.code !== 200) {
-          alert(result.msg || '预约失败')
+        if (!this.isBizOk(body)) {
+          const msg = this.getMsg(body, '预约失败')
+          if (msg && msg.includes('\n')) {
+            this.conflictLines = msg.split('\n').slice(0, 4)
+          }
+          alert(msg)
           return
         }
 
-        alert('预约成功')
-        // 清空选择
-        this.selectedSlots = []
-        // 重新拉一遍时段状态，刷新灰色/可选状态
-        await this.fetchSlotStatus()
-        // 保留原来的行为：预约后跳到“我的预约”
+        alert(this.getMsg(body, '预约成功'))
+        this.clearAllSelections()
         this.emitChange('user-reservations')
       } catch (e) {
         console.error(e)
         alert('预约失败，服务器异常')
+      } finally {
+        this.submittingReservations = false
       }
     },
 
-    // 从后端拉取某房间某天的“已满时段”
-    async fetchSlotStatus () {
-      // 房间或日期还没准备好就先不调
-      if (!this.currentRoomId || !this.currentDateStr) return
+    async loadMyReservations (opts = {}) {
+      const {
+        refreshNoShowNotify = true // 是否提示“自动标记未签到”
+      } = opts
+
+      if (!this.ensureCurrentUserId()) return
+
+      // 进入列表前，让后端刷新一次未签到状态（可选择是否弹提醒）
+      await this.refreshNoShowStatus({ notify: refreshNoShowNotify })
 
       try {
-        const resp = await this.$axios.get('/reservation/slots', {
-          params: {
-            roomId: this.currentRoomId,
-            date: this.currentDateStr
-          }
-        })
-
-        const result = resp.data
-        const dto = result.data || {}
-        // 后端返回的是 [8,9,14] 这样，我们前端用字符串 id
-        this.disabledSlotIds = (dto.disabledSlotIds || []).map(id => String(id))
-      } catch (e) {
-        console.error(e)
-        alert('获取时段状态失败')
-      }
-    },
-
-    // 把后端返回的预约列表加载到表格
-    async loadMyReservations () {
-      // 确保有 currentUserId，没有的话再尝试从 localStorage 读一次
-      if (!this.currentUserId) {
-        const raw = localStorage.getItem('ssrmsUser')
-        if (raw) {
-          try {
-            const user = JSON.parse(raw)
-            this.currentUserId = user.id   // 如果主键叫 userId，就改成 user.userId
-          } catch (e) {
-            console.error(e)
-          }
-        }
-      }
-
-      if (!this.currentUserId) return
-
-      // ⭐ 关键：先让后端刷新一次“未签到”状态
-      await this.refreshNoShowStatus()
-
-      try {
-        const resp = await this.$axios.get('/reservation/my', {
+        const res = await this.$axios.get('/reservation/my', {
           params: { userId: this.currentUserId }
         })
-        const result = resp.data
-        const list = Array.isArray(result.data) ? result.data.slice() : []
+
+        const list = Array.isArray(this.normalizeData(res)) ? this.normalizeData(res).slice() : []
 
         // 日期升序，同一天按开始时间升序
         list.sort((a, b) => {
           const da = a.date || ''
           const db = b.date || ''
-          if (da !== db) {
-            // 日期升序
-            return da.localeCompare(db)
-          }
+          if (da !== db) return da.localeCompare(db)
           const ta = a.startTime || ''
           const tb = b.startTime || ''
-          // 同一天时间升序
           return ta.localeCompare(tb)
         })
 
@@ -1323,34 +1620,24 @@ export default {
       }
     },
 
-    // 把 startTime / endTime 拼成 “HH:mm-HH:mm”
     formatTimeRange (item) {
       const s = (item.startTime || '').slice(0, 5)
       const e = (item.endTime || '').slice(0, 5)
       return s && e ? `${s}-${e}` : ''
     },
 
-    // 把后端状态英文转成中文文案
     renderStatusText (status) {
       switch (status) {
-        case 'reserved':
-          return '待签到'
-        case 'checked_in':
-          return '已签到'
-        case 'late':
-          return '迟到'
-        case 'no_show':
-          return '未签到'
-        case 'cancelled':
-          return '已取消'
-        case 'cancel_overdue':
-          return '逾期取消'
-        default:
-          return status || ''
+        case 'reserved': return '待签到'
+        case 'checked_in': return '已签到'
+        case 'late': return '迟到'
+        case 'no_show': return '未签到'
+        case 'cancelled': return '已取消'
+        case 'cancel_overdue': return '逾期取消'
+        default: return status || ''
       }
     },
 
-    // 根据状态决定徽标颜色（先留好钩子，样式后面想美化再改）
     statusClass (status) {
       return {
         'badge-pending': status === 'reserved',
@@ -1363,66 +1650,48 @@ export default {
     },
 
     gotoPrevPage () {
-      if (this.reservationPageIndex > 1) {
-        this.reservationPageIndex--
-      }
+      if (this.reservationPageIndex > 1) this.reservationPageIndex--
     },
-
     gotoNextPage () {
-      if (this.reservationPageIndex < this.totalPages) {
-        this.reservationPageIndex++
-      }
+      if (this.reservationPageIndex < this.totalPages) this.reservationPageIndex++
     },
 
-    // 签到
     async handleCheckIn (item) {
       try {
-        const resp = await this.$axios.post(`/reservation/checkin/${item.id}`)
-        const result = resp.data
-        if (result.code && result.code !== 200) {
-          alert(result.msg || '签到失败')
-          return
-        }
-        alert(result.msg || '签到成功')
-        // 重新刷新列表和占用情况
-        await this.loadMyReservations()
-        // 如果你希望“我要预约”那边也立即刷新占用，可以顺带：
-        // await this.fetchSlotStatus()
+        const res = await this.$axios.post(`/reservation/checkin/${item.id}`)
+        const body = this.normalizeBody(res)
+
+        const ok = this.isBizOk(body)
+        alert(this.getMsg(body, ok ? '签到成功' : '签到失败'))
+
+        // ✅ 不管成功失败，都刷新一次列表（避免“后端已更新但页面不变”）
+        await this.loadMyReservations({ refreshNoShowNotify: false })
       } catch (e) {
         console.error(e)
         alert('签到失败，服务器异常')
       }
     },
 
-    // 取消预约
     async handleCancel (item) {
-      // 前端再保险一次 10 分钟规则
       if (!this.canCancel(item)) {
         alert('距离开始不足 10 分钟，无法取消，请联系管理员处理')
         return
       }
 
       const ok = window.confirm(`确定要取消本次预约（${item.date} ${this.formatTimeRange(item)}）吗？`)
-      if (!ok) {
-        return
-      }
+      if (!ok) return
 
       try {
-        const resp = await this.$axios.post(`/reservation/cancel/${item.id}`)
-        const result = resp.data || {}
+        const res = await this.$axios.post(`/reservation/cancel/${item.id}`)
+        const body = this.normalizeBody(res)
 
-        // 这里按你的 Result 约定来，如果后端是 code === 200 代表成功就保留这一句
-        if (result.code && result.code !== 200) {
-          alert(result.msg || '取消失败')
+        if (!this.isBizOk(body)) {
+          alert(this.getMsg(body, '取消失败'))
           return
         }
 
-        // 后端会根据规则把状态改成 cancelled 或 cancel_overdue
-        alert(result.msg || '取消成功')
-
-        // 重新加载预约列表
-        await this.loadMyReservations()
-        // 释放座位后，顺便刷新一下“我要预约”页面的占用情况
+        alert(this.getMsg(body, '取消成功'))
+        await this.loadMyReservations({ refreshNoShowNotify: false })
         await this.fetchSlotStatus()
       } catch (e) {
         console.error(e)
@@ -1430,155 +1699,90 @@ export default {
       }
     },
 
-    // 是否允许取消：只拦“开始前 10 分钟”的情况
     canCancel (item) {
       if (item.status !== 'reserved') return false
       if (!item.date || !item.startTime) return false
 
       try {
-        // date 例如 '2025-12-22'，startTime 例如 '01:00:00'
         const startStr = item.date + 'T' + (item.startTime || '').slice(0, 8)
         const start = new Date(startStr)
-        if (isNaN(start.getTime())) {
-          // 解析失败就不在前端拦，交给后端判断
-          return true
-        }
+        if (isNaN(start.getTime())) return true
+
         const now = new Date()
         const diffMs = start.getTime() - now.getTime()
         const tenMinutes = 10 * 60 * 1000
-
-        // diffMs > 10 分钟 ⇒ 可以取消
         return diffMs > tenMinutes
       } catch (e) {
         console.error(e)
-        // 出异常直接放行，交给后端
         return true
       }
     },
-    // 进入“我的预约”前，先让后台把已过期的预约批量标记为未签到
-    async refreshNoShowStatus () {
-      // 确保 currentUserId 有值
-      if (!this.currentUserId) {
-        const raw = localStorage.getItem('ssrmsUser')
-        if (raw) {
-          try {
-            const user = JSON.parse(raw)
-            this.currentUserId = user.id   // 如果你用的是 userId，就改成 user.userId
-          } catch (e) {
-            console.error(e)
-          }
-        }
-      }
 
-      if (!this.currentUserId) return
+    async refreshNoShowStatus (opts = {}) {
+      const { notify = true } = opts
+      if (!this.ensureCurrentUserId()) return
 
       try {
-        const resp = await this.$axios.post('/reservation/refreshNoShow', null, {
+        const res = await this.$axios.post('/reservation/refreshNoShow', null, {
           params: { userId: this.currentUserId }
         })
-        const result = resp.data || {}
-        const updated = typeof result.data === 'number' ? result.data : 0
+        const data = this.normalizeData(res)
+        const updated = typeof data === 'number' ? data : 0
 
-        // 有新被标记为“未签到”的记录，再提醒一次
-        if (updated > 0) {
+        if (notify && updated > 0) {
           alert(`有 ${updated} 条已过期但未签到的预约，系统已自动标记为“未签到”，请留意信用分变化。`)
         }
       } catch (e) {
         console.error(e)
-        // 这里不强制报错给用户，避免影响列表加载
       }
     },
+
     async loadMyViolations () {
-      // 和 loadMyReservations 一样，先确保有 currentUserId
-      if (!this.currentUserId) {
-        const raw = localStorage.getItem('ssrmsUser')
-        if (raw) {
-          try {
-            const user = JSON.parse(raw)
-            this.currentUserId = user.id
-          } catch (e) {
-            console.error(e)
-          }
-        }
-      }
-      if (!this.currentUserId) return
+      if (!this.ensureCurrentUserId()) return
 
       try {
-        // 先让后端更新一次未签到状态
-        await this.refreshNoShowStatus()
+        // 这里默认不弹“刷新未签到”的提醒，避免用户一进页面就被打断
+        await this.refreshNoShowStatus({ notify: false })
 
-        const resp = await this.$axios.get('/reservation/violations', {
+        const res = await this.$axios.get('/reservation/violations', {
           params: { userId: this.currentUserId }
         })
-        const result = resp.data
-        const list = Array.isArray(result.data) ? result.data.slice() : []
 
-        // 这里后端已经按日期倒序 + 时间升序排过了，也可以再按你想要的顺序排一次
+        const list = Array.isArray(this.normalizeData(res)) ? this.normalizeData(res).slice() : []
         this.myViolations = list
-        this.violationPageIndex = 1   // 每次加载回到第一页
+        this.violationPageIndex = 1
       } catch (e) {
         console.error(e)
         alert('加载违规记录失败')
       }
+
+      await this.loadUserProfile()
+
     },
 
     gotoPrevViolationPage () {
-      if (this.violationPageIndex > 1) {
-        this.violationPageIndex--
-      }
+      if (this.violationPageIndex > 1) this.violationPageIndex--
     },
-
     gotoNextViolationPage () {
-      if (this.violationPageIndex < this.violationTotalPages) {
-        this.violationPageIndex++
-      }
+      if (this.violationPageIndex < this.violationTotalPages) this.violationPageIndex++
     },
 
-    // 加载个人信息
     async loadUserProfile () {
-      // 先确保 currentUserId 有值
-      if (!this.currentUserId) {
-        const raw = localStorage.getItem('ssrmsUser')
-        if (raw) {
-          try {
-            const user = JSON.parse(raw)
-            // 登录时返回的就是 User，所以这里取 id 就行
-            this.currentUserId = user.id
-          } catch (e) {
-            console.error(e)
-          }
-        }
-      }
-
-      if (!this.currentUserId) {
-        console.warn('currentUserId 为空，无法加载个人信息')
-        return
-      }
+      if (!this.ensureCurrentUserId()) return
 
       this.profileLoading = true
       try {
-        // ✅ 和你后端一致：@RequestParam Integer userId
-        const resp = await this.$axios.get('/user/profile', {
+        const res = await this.$axios.get('/user/profile', {
           params: { userId: this.currentUserId }
         })
 
-        const result = resp.data || {}
-        console.log('GET /user/profile 返回：', result)
+        const u = this.normalizeData(res) || {}
+        this.currentCreditScore = Number.isFinite(Number(u.creditScore)) ? Number(u.creditScore) : 100
 
-        // 兼容两种写法：
-        // 1）{ code, msg, data: { ...user } }
-        // 2）直接就是 { id, name, ... }（万一以后你改 Result）
-        const u = result.data || result
-        if (!u || !u.id) {
-          console.error('加载个人信息失败：', result.msg || '返回数据为空')
-          return
-        }
-
-        // 和实体字段一一对应
         this.profileForm = {
-          name: u.name || '',
-          account: u.account || '',
-          studentNo: u.studentNo || '',
+          name: u.userName || u.name || this.profileForm.name || '',
+          account: u.accountNo || u.account || this.profileForm.account || '',
+          studentNo: u.accountNo || u.studentNo || this.profileForm.studentNo || '',
           college: u.college || '',
           gradeClass: u.gradeClass || '',
           phone: u.phone || '',
@@ -1593,46 +1797,66 @@ export default {
       }
     },
 
-    // 保存个人信息
     async handleProfileSave () {
-      if (!this.currentUserId) {
+      if (!this.ensureCurrentUserId()) {
         alert('当前用户信息缺失，请重新登录后再试')
         return
       }
 
       this.profileSaving = true
       try {
+        // 同时带上 userName/accountNo 等字段，兼容后端不同命名
         const payload = {
+          userId: this.currentUserId,
           id: this.currentUserId,
+
+          userName: this.profileForm.name,
           name: this.profileForm.name,
+
+          accountNo: this.profileForm.studentNo || this.profileForm.account,
+          account: this.profileForm.studentNo || this.profileForm.account,
+          studentNo: this.profileForm.studentNo || this.profileForm.account,
+
           college: this.profileForm.college,
           gradeClass: this.profileForm.gradeClass,
           phone: this.profileForm.phone,
           email: this.profileForm.email,
           commonCampus: this.profileForm.commonCampus,
-          profileRemark: this.profileForm.profileRemark,
-          studentNo: this.profileForm.studentNo
+          profileRemark: this.profileForm.profileRemark
         }
 
-        const resp = await this.$axios.post('/user/profile', payload)
-        const result = resp.data || {}
+        const res = await this.$axios.post('/user/profile', payload)
+        const body = this.normalizeBody(res)
 
-        if (result.code === 200) {
-          alert('保存成功')
+        if (!this.isBizOk(body)) {
+          alert(this.getMsg(body, '保存失败'))
+          return
+        }
 
-          // 顺便更新 localStorage 里的 ssrmsUser，让其他页面也用到最新信息
-          const raw = localStorage.getItem('ssrmsUser')
-          if (raw) {
-            try {
-              const user = JSON.parse(raw)
-              Object.assign(user, payload)
-              localStorage.setItem('ssrmsUser', JSON.stringify(user))
-            } catch (e) {
-              console.error(e)
-            }
+        alert(this.getMsg(body, '保存成功'))
+
+        // 更新 localStorage
+        const storage = this.getUserStorage()
+        const raw = storage.getItem('ssrmsUser')
+        if (raw) {
+          try {
+            const user = JSON.parse(raw)
+            Object.assign(user, {
+              name: this.profileForm.name,
+              studentNo: this.profileForm.studentNo,
+              college: this.profileForm.college,
+              gradeClass: this.profileForm.gradeClass,
+              phone: this.profileForm.phone,
+              email: this.profileForm.email,
+              age: this.profileForm.age,
+              sex: this.profileForm.sex,
+              commonCampus: this.profileForm.commonCampus,
+              profileRemark: this.profileForm.profileRemark
+            })
+            storage.setItem('ssrmsUser', JSON.stringify(user))
+          } catch (e) {
+            console.error(e)
           }
-        } else {
-          alert(result.msg || '保存失败')
         }
       } catch (e) {
         console.error('请求 /user/profile 失败', e)
@@ -1642,16 +1866,12 @@ export default {
       }
     },
 
-    // 右下角“随手一评”按钮
     submitFB (score) {
-      // 这里只是演示：实际接入接口时，把 score、当前用户、时间等发给后端即可
       console.log('用户给了一个快捷评分：', score)
       this.openFeedback = false
     },
 
-    // 把天气代码翻译成中文
     codeToDesc (code) {
-      // open-meteo 的天气代码含义可以在官方文档里查，这里只列了一些常见的
       const map = {
         0: '晴',
         1: '多云',
@@ -1674,7 +1894,6 @@ export default {
       return map[code] || '多云'
     },
 
-    // 拉天气（示范接口：open-meteo，使用 fetch 即可）
     async loadWeather () {
       try {
         const resp = await fetch(
@@ -1706,45 +1925,156 @@ export default {
       }
     },
 
-    refreshQuote () {
-      // 没配置金句就直接返回
-      if (!this.quotes || !this.quotes.length) return
+    async loadQuoteFromDb () {
+      try {
+        const res = await this.$axios.get('/quote/random', {
+          params: { excludeId: this.dailyQuoteId || undefined }
+        })
 
-      // 只有一句就没得换
-      if (this.quotes.length === 1) {
-        this.dailyQuote = this.quotes[0]
-        return
-      }
+        const body = this.normalizeBody(res)
+        const data = this.normalizeData(res)
 
-      // 尽量不要连刷出同一句
-      let next = this.dailyQuote
-      while (next === this.dailyQuote) {
-        const idx = Math.floor(Math.random() * this.quotes.length)
-        next = this.quotes[idx]
+        // 这里即使后端不包 R，也能正常工作
+        if (this.isBizOk(body) && data && data.content) {
+          this.dailyQuote = data.content || ''
+          this.dailyQuoteId = data.id || null
+          return
+        }
+
+        // 后端返回成功但 content 为空的兜底
+        this.dailyQuote = '今天也要稳住节奏，先做一小步。'
+        this.dailyQuoteId = null
+      } catch (e) {
+        // ✅ 关键：把真正失败原因打出来（404 / 405 / CORS / 500 一眼就能看见）
+        const status = e?.response?.status
+        const url = e?.config?.url
+        const msg = e?.message
+        console.warn('[quote] load failed:', { status, url, msg, resp: e?.response?.data })
+
+        this.dailyQuote = '网络开小差了，但你的自律别掉线。'
+        this.dailyQuoteId = null
       }
-      this.dailyQuote = next
     },
 
+    startQuoteTimer () {
+      this.stopQuoteTimer()
+      this.quoteTimer = setInterval(() => {
+        if (this.currentPage === 'home') {
+          this.loadQuoteFromDb()
+        }
+      }, 20000)
+    },
+
+    stopQuoteTimer () {
+      if (this.quoteTimer) {
+        clearInterval(this.quoteTimer)
+        this.quoteTimer = null
+      }
+    },
+
+    async refreshQuote () {
+      // 手动刷新：先换一句，再把 20s 计时从现在重新开始
+      await this.loadQuoteFromDb()
+      this.startQuoteTimer()
+    },
+
+    emojiWeather (desc) {
+      if (!desc) return '⛅'
+      if (desc.includes('雨')) return '🌧️'
+      if (desc.includes('云')) return '⛅'
+      if (desc.includes('晴')) return '☀️'
+      if (desc.includes('雪')) return '❄️'
+      return '⛅'
+    },
+
+    async fetchSeatConflicts () {
+      this.disabledSeatNos = []
+
+      if (!this.currentRoomId || !this.currentDateStr || this.startHour == null || this.endHour == null) return
+
+      const startTime = `${this.pad2(this.startHour)}:00`
+      const endTime = `${this.pad2(this.endHour)}:00`
+
+      try {
+        const res = await this.$axios.get('/reservation/seatConflicts', {
+          params: { roomId: this.currentRoomId, date: this.currentDateStr, startTime, endTime }
+        })
+
+        const map = this.normalizeData(res) || {}
+        this.disabledSeatNos = Object.keys(map)
+
+        // 如果当前已选座位在新时间段下变成冲突：直接清掉选择
+        if (this.selectedSeatNo && this.disabledSeatNos.includes(this.selectedSeatNo)) {
+          this.selectedSeatNo = ''
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    },
+
+    async loadHomeDashboard () {
+      try {
+        if (!this.currentUserId) return
+        const res = await this.$axios.get('/dashboard/home', {
+          params: { userId: this.currentUserId }
+        })
+        const data = this.normalizeData(res) || {}
+        if (data.todayOverview) this.todayOverview = data.todayOverview
+        if (data.monthBrief) this.monthBrief = data.monthBrief
+      } catch (e) {
+        console.error('loadHomeDashboard failed:', e)
+      }
+    },
+
+    formatLastVisit (dtStr) {
+      if (!dtStr) return '-'
+
+      // dtStr: "yyyy-MM-dd HH:mm"
+      const parts = dtStr.replace('T', ' ').split(' ')
+      if (parts.length < 2) return dtStr
+
+      const [d, t] = parts
+      const [y, m, day] = d.split('-').map(n => parseInt(n, 10))
+      const [hh, mm] = t.split(':').map(n => parseInt(n, 10))
+
+      const dt = new Date(y, (m || 1) - 1, day || 1, hh || 0, mm || 0)
+      const now = new Date()
+
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const startOfDt = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate())
+      const diffDays = Math.round((startOfToday - startOfDt) / (24 * 3600 * 1000))
+
+      const timeText = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+
+      if (diffDays === 0) return `今天 ${timeText}`
+      if (diffDays === 1) return `昨天 ${timeText}`
+      return `${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${timeText}`
+    },
   },
+
   watch: {
-    currentPage (newVal) {
-      if (newVal === 'user-reservations') {
-        this.loadMyReservations()
-      }
-      if (newVal === 'user-reserve') {
-        this.fetchSlotStatus()
-      }
-      if (newVal === 'user-violations') {
-        this.loadMyViolations()
-      }
-      if (newVal === 'user-profile') {
-        this.loadUserProfile()
+    currentPage: {
+      immediate: true,
+      handler (newVal) {
+        if (newVal === 'home') {
+          this.startQuoteTimer()
+        } else {
+          this.stopQuoteTimer()
+        }
+
+        if (newVal === 'user-reservations') this.loadMyReservations({ refreshNoShowNotify: true })
+        if (newVal === 'user-reserve') this.initReserveRooms()
+        if (newVal === 'user-violations') this.loadMyViolations()
+        if (newVal === 'user-profile') this.loadUserProfile()
       }
     },
     myReservations () {
       this.reservationPageIndex = 1
-    }
-  },
+    },
+    onlyNoShow () {
+      this.reservationPageIndex = 1
+    },
+  }
 }
 </script>
 
@@ -1783,7 +2113,8 @@ export default {
 .table-wrapper {
   margin-top: 12px;
   border-radius: 10px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid #e5e7eb;
 }
 
@@ -1943,10 +2274,66 @@ export default {
 /* 场地 tabs + 开关 */
 .reserve-toolbar {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   margin-top: 2px;
+}
+
+.reserve-control {
+  flex: 1;
+  min-width: 140px;
+}
+
+.reserve-control.short {
+  flex: 0.95;
+  min-width: 140px;
+}
+
+.reserve-control.long {
+  flex: 1.25;
+  min-width: 170px;
+}
+
+@media (max-width: 1100px) {
+  .reserve-toolbar {
+    flex-wrap: wrap;
+  }
+  .reserve-control.short,
+  .reserve-control.long {
+    flex: 1;
+    min-width: 160px;
+  }
+}
+
+.reserve-select {
+  width: 100%;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background-color: #fff;
+  padding: 0 12px;
+  font-size: 13px;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.reserve-select:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 4px rgba(147, 197, 253, 0.35);
+}
+
+.reserve-select:disabled {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.reserve-warning {
+  font-size: 12px;
+  color: #dc2626;
+  white-space: nowrap;
 }
 
 .venue-tabs {
@@ -2140,7 +2527,7 @@ export default {
 
 .slot-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
   gap: 10px;
 }
 
@@ -2149,11 +2536,12 @@ export default {
   border: 1px solid #e5e7eb;
   padding: 8px 10px;
   background-color: #f9fafb;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
   flex-direction: column; /* 纵向排布子元素 */
+  align-items: center;
 }
 
 .slot-item:disabled {
@@ -2161,17 +2549,14 @@ export default {
 }
 
 .slot-time {
-  font-size: 13px;
-  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
 }
 
 .slot-range {
-  font-size: 11px;
+  font-size: 10px;
   color: #6b7280;
-}
-
-.slot-selected .slot-range {
-  color: #e0ecff;
 }
 
 /* 已选时段 + 提交区域 */
@@ -2231,6 +2616,12 @@ export default {
 .link-btn:hover {
   color: #111827;
   text-decoration: underline;
+}
+
+.link-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  text-decoration: none;
 }
 
 .reserve-btn {
@@ -2820,7 +3211,6 @@ export default {
   font-weight: 500;
 }
 
-.weather-main{margin:6px 0}
 .weather-icon{font-size: 28px}
 .weather-temp{font-size: 22px;font-weight: 600;margin-left:6px}
 .weather-desc{font-size: 12px;color:#9ca3af}
@@ -2882,7 +3272,6 @@ export default {
 .feedback-title{font-size: 12px;color:#6b7280;margin-bottom: 6px;text-align: center}
 .feedback-emojis{display: flex;justify-content: space-around;font-size: 20px;cursor: pointer}
 
-/* 新增 */
 .weather-mini{
   position: absolute;
   top: 12px;
@@ -2895,7 +3284,12 @@ export default {
   width: 130px;
   z-index: 1;
 }
-.weather-mini .weather-main{ display: flex; align-items: center; justify-content: center; margin-bottom: 2px; }
+.weather-mini .weather-main{
+  margin: 0 0 2px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .weather-mini .weather-icon{ font-size: 20px; }
 .weather-mini .weather-temp{ font-size: 16px; font-weight: 600; margin-left: 6px; }
 .weather-mini .weather-desc{ font-size: 11px; color: #6b7280; text-align: center; white-space: nowrap; }
@@ -2909,7 +3303,6 @@ export default {
   margin-top: 10px;
 }
 
-/* 通用一行容器（整行 1 列） */
 .home-row {
   width: 100%;
 }
@@ -2917,7 +3310,7 @@ export default {
 /* 第二行：今日自习室概况 + 本月学习简报 */
 .home-row-two {
   display: grid;
-  grid-template-columns: 1.4fr 2fr;   /* ⭐ 左右 1:1 等宽 */
+  grid-template-columns: 1.4fr 2fr;
   gap: 12px;
 }
 
@@ -2936,7 +3329,8 @@ export default {
 
 /* 今日提示整块卡片 */
 .quote-card {
-  position: relative;              /* 为右上角按钮提供定位参照 */
+  width: 100%;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2972,7 +3366,7 @@ export default {
 }
 
 .quote-content {
-  max-width: 640px;          /* 控制一下宽度，避免太长一行 */
+  max-width: 640px;
 }
 
 /* 上面一行：图标 + “今日提示” */
@@ -2993,11 +3387,129 @@ export default {
   color: #9ca3af;
 }
 
-/* 下面一句话内容，字体调大一点 */
 .quote-text {
   font-size: 17px;           /* ⭐ 比之前更大一点 */
   color: #4b5563;
   line-height: 1.6;
 }
 
+.slot-item.slot-available {
+  background-color: #f9fafb;
+}
+
+.slot-item.slot-selected {
+  border-color: #2563eb;
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  color: #ffffff;
+}
+
+.slot-item.slot-selected .slot-range {
+  color: #e0ecff;
+}
+
+.slot-item.slot-disabled {
+  background-color: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #9ca3af;
+}
+
+.slot-item.slot-disabled .slot-range {
+  color: #9ca3af;
+}
+
+.badge.badge-pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge.badge-done {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.badge.badge-late {
+  background-color: #ffe4e6;
+  color: #9f1239;
+}
+
+.badge.badge-missed {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.badge.badge-cancelled {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.badge.badge-cancel-overdue {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+.home-panel-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.home-panel-body{
+  margin-top: 8px;
+}
+
+.my-res-table { table-layout: fixed; }
+
+.my-res-table th,
+.my-res-table td {
+  padding: 10px 8px;
+}
+
+.my-res-table th.col-no,      .my-res-table td.col-no      { width: 140px; padding-right: 4px; }
+.my-res-table th.col-campus,  .my-res-table td.col-campus  { width: 80px;  padding-left: 4px;  }
+.my-res-table th.col-building,.my-res-table td.col-building{ width: 100px; }
+.my-res-table th.col-room,    .my-res-table td.col-room    { width: 80px;  }
+.my-res-table th.col-date,    .my-res-table td.col-date    { width: 110px; }
+.my-res-table th.col-time,    .my-res-table td.col-time    { width: 100px; }
+.my-res-table th.col-seat,    .my-res-table td.col-seat    { width: 70px;  text-align: center; }
+.my-res-table th.col-status,  .my-res-table td.col-status  { width: 90px;  text-align: center; }
+.my-res-table th.col-actions, .my-res-table td.col-actions { width: 80px; text-align: left; }
+
+.my-res-table td.col-no,
+.my-res-table td.col-building {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.my-res-table td.col-actions .actions{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.res-filter-row{
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin: 6px 0 10px;
+}
+
+.res-filter{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #6b7280;
+  user-select: none;
+}
+
+.res-filter-checkbox{
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
 </style>
+

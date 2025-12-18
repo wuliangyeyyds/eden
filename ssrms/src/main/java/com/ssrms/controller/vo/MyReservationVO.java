@@ -5,9 +5,6 @@ import lombok.Data;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
-/**
- * “我的预约”列表 VO
- */
 @Data
 public class MyReservationVO {
 
@@ -16,21 +13,25 @@ public class MyReservationVO {
     /** 预约编号 */
     private String reservationNo;
 
-    /** 自习室名称，如：本部 · 图书馆 3 楼 301 */
+    /** 校区 */
+    private String campus;
+
+    /** 建筑 */
+    private String building;
+
+    /** 自习室名称（room_name） */
     private String roomName;
 
-    /** 日期 */
+    /** 兼容字段：校区 · 建筑 自习室 */
+    private String roomLabel;
+
+    /** 座位号（seat_no），没有则“未指定” */
+    private String seatNo;
+
     private LocalDate date;
-
-    /** 开始时间 */
     private LocalTime startTime;
-
-    /** 结束时间 */
     private LocalTime endTime;
 
-    /** 座位号（暂时简单用 seatId 字符串表示） */
-    private String seatLabel;
-
-    /** 状态：reserved / finished / cancelled ... */
+    /** reserved / checked_in / late / no_show / cancelled / cancel_overdue ... */
     private String status;
 }

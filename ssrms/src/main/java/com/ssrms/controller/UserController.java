@@ -2,9 +2,11 @@ package com.ssrms.controller;
 
 import com.ssrms.common.Result;
 import com.ssrms.controller.dto.LoginDTO;
+import com.ssrms.controller.dto.RegisterDTO;
 import com.ssrms.entity.User;
 import com.ssrms.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,7 +27,7 @@ public class UserController {
             return Result.fail("账号或密码错误，或账号状态异常");
         }
 
-        return Result.success(user);
+        return Result.success(toVO(user));
     }
 
     /**
@@ -38,7 +40,7 @@ public class UserController {
         if (user == null) {
             return Result.fail("用户不存在");
         }
-        return Result.success(user);
+        return Result.success(toVO(user));
     }
 
     /**
@@ -72,6 +74,72 @@ public class UserController {
         }
 
         // 返回最新的用户信息
-        return Result.success(user);
+        return Result.success(toVO(user));
     }
+
+    // ✅ 账号查重：给前端实时提示用
+    @GetMapping("/check-account")
+    public Result checkAccount(@RequestParam("account") String account) {
+        boolean exists = userService.existsByAccount(account);
+        return Result.success(exists);
+    }
+
+    // ✅ 注册：真正写入数据库
+    @PostMapping("/register")
+    public Result register(@RequestBody RegisterDTO dto) {
+        if (dto == null
+                || !StringUtils.hasText(dto.getAccount())
+                || !StringUtils.hasText(dto.getName())
+                || !StringUtils.hasText(dto.getStudentNo())
+                || !StringUtils.hasText(dto.getPassword())
+                || !StringUtils.hasText(dto.getConfirmPassword())) {
+            return Result.fail("注册信息不完整");
+        }
+
+        // 1) 密码一致性校验
+        if (!dto.getPassword().equals(dto.getConfirmPassword())) {
+            return Result.fail("密码不同");
+        }
+
+        // 2) 账号不能重复
+        if (userService.existsByAccount(dto.getAccount())) {
+            return Result.fail("该账号已存在");
+        }
+
+        // 3) 角色：注册一律学生，管理员账号建议由后台初始化/数据库预置
+        int roleId = 1;
+
+        User created = userService.register(
+                dto.getAccount(),
+                dto.getName(),
+                dto.getStudentNo(),
+                dto.getPassword(),
+                roleId
+        );
+
+        return Result.success(toVO(created));
+
+    }
+
+    private com.ssrms.controller.vo.UserVO toVO(User u) {
+        com.ssrms.controller.vo.UserVO vo = new com.ssrms.controller.vo.UserVO();
+        vo.setId(u.getId());
+        vo.setAccount(u.getAccount());
+        vo.setName(u.getName());
+        vo.setStudentNo(u.getStudentNo());
+        vo.setRoleId(u.getRoleId());
+        vo.setPhone(u.getPhone());
+        vo.setEmail(u.getEmail());
+        vo.setCollege(u.getCollege());
+        vo.setGradeClass(u.getGradeClass());
+        vo.setCommonCampus(u.getCommonCampus());
+        vo.setProfileRemark(u.getProfileRemark());
+        vo.setCreditScore(u.getCreditScore());
+        vo.setBlacklistFlag(u.getBlacklistFlag());
+        vo.setIsValid(u.getIsValid());
+        vo.setCreateTime(u.getCreateTime());
+        vo.setUpdateTime(u.getUpdateTime());
+        return vo;
+    }
+
 }

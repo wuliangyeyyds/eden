@@ -2,24 +2,14 @@ package com.ssrms.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ssrms.common.Result;
-import com.ssrms.controller.dto.CreateReservationDTO;
-import com.ssrms.controller.dto.SlotStatusDTO;
+import com.ssrms.controller.dto.CreateSeatReservationDTO;
 import com.ssrms.entity.Reservation;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 public interface ReservationService extends IService<Reservation> {
-
-    /**
-     * 查询某个自习室在某一天的时段占用情况
-     */
-    SlotStatusDTO getSlotStatus(Integer roomId, LocalDate date);
-
-    /**
-     * 创建预约，返回冲突的时段列表；为空表示全部成功
-     */
-    List<Integer> createReservations(CreateReservationDTO req);
 
     /**
      * 学生签到
@@ -38,4 +28,10 @@ public interface ReservationService extends IService<Reservation> {
      * @return 本次一共更新了多少条
      */
     int markExpiredAsNoShow(Integer userId);
+
+    Result createSeatReservations(CreateSeatReservationDTO dto);
+
+    Result myViolations(Integer userId);
+
+    Result seatConflicts(Integer roomId, LocalDate date, LocalTime startTime, LocalTime endTime);
 }

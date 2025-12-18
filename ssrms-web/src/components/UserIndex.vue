@@ -23,6 +23,7 @@
 </template>
 
 <script>
+import { ElMessageBox, ElMessage } from 'element-plus'
 import UserHeader from './UserHeader.vue'
 import UserAside from './UserAside.vue'
 import UserHome from './UserHome.vue'
@@ -36,7 +37,6 @@ export default {
   },
   data () {
     return {
-      // 默认首页
       currentPage: 'home'
     }
   },
@@ -44,14 +44,34 @@ export default {
     changePage (page) {
       this.currentPage = page
     },
-    handleLogout () {
-      // 1. 清掉当前登录用户的信息
-      localStorage.removeItem('ssrmsUser')
-      // 如果之后你有 token 之类，也可以一起删：
-      // localStorage.removeItem('ssrmsToken')
 
-      // 2. 回到登录页，用 replace 避免浏览器“后退”再回到 /user
-      this.$router.replace('/login')
+    async handleLogout () {
+      try {
+        await ElMessageBox.confirm(
+            '确定要退出登录吗？',
+            '提示',
+            {
+              confirmButtonText: '退出',
+              cancelButtonText: '取消',
+              type: 'warning'
+            }
+        )
+
+        // 1) 清掉登录信息（路由守卫用 ssrmsUser 的话，这个必须删）
+        localStorage.removeItem('ssrmsUser')
+        // 可选：如果你存过 token，也一起删
+        localStorage.removeItem('ssrmsToken')
+        localStorage.removeItem('token')
+        sessionStorage.removeItem('ssrmsUser')
+        sessionStorage.removeItem('ssrmsToken')
+        sessionStorage.removeItem('token')
+
+        // 2) 跳回登录页（replace 防止后退回到 /user）
+        ElMessage.success('已退出登录')
+        this.$router.replace('/login')
+      } catch (e) {
+        // 用户点了“取消”就啥也不做
+      }
     }
   }
 }
@@ -76,7 +96,7 @@ export default {
 .content-area {
   flex: 1;
   display: flex;
-  padding: 8px 24px 20px 24px; /* 底部 padding 比较小一点 */
+  padding: 8px 24px 20px 24px;
   box-sizing: border-box;
 }
 

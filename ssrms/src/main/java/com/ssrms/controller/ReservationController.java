@@ -1,10 +1,11 @@
 package com.ssrms.controller;
 
 import com.ssrms.common.Result;
-import com.ssrms.controller.dto.CreateReservationDTO;
-import com.ssrms.controller.dto.SlotStatusDTO;
+import com.ssrms.controller.dto.CreateSeatReservationDTO;
+import com.ssrms.entity.Seat;
 import com.ssrms.service.ReservationService;
 import com.ssrms.service.RoomService;
+import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -15,13 +16,10 @@ import com.ssrms.controller.vo.MyViolationVO;
 import com.ssrms.entity.Reservation;
 import com.ssrms.entity.Room;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Arrays;
+import java.time.LocalTime;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/reservation")
@@ -33,43 +31,15 @@ public class ReservationController {
     @Autowired
     private RoomService roomService;
 
-    /**
-     * 查询某自习室某一天的时段占用情况
-     * GET /reservation/slots?roomId=3&date=2025-12-13
-     */
-    @GetMapping("/slots")
-    public Result getSlots(@RequestParam Integer roomId,
-                           @RequestParam
-                           @DateTimeFormat(pattern = "yyyy-MM-dd")
-                           LocalDate date) {
-        SlotStatusDTO dto = reservationService.getSlotStatus(roomId, date);
-        return Result.success(dto);
-    }
-
-    /**
-     * 创建预约
-     * POST /reservation/create
-     * body: { roomId, date, slotIds, userId }
-     */
-    @PostMapping("/create")
-    public Result create(@RequestBody CreateReservationDTO req) {
-        // 先简单一点，userId 从 body 里拿；以后可以改成从登录态中解析
-        if (req.getUserId() == null) {
-            return Result.fail("用户未登录或 userId 为空");
-        }
-        List<Integer> conflict = reservationService.createReservations(req);
-        if (!conflict.isEmpty()) {
-            return Result.fail("部分时段已被约满，请刷新后重新选择");
-        }
-        return Result.success("预约成功");
-    }
+    @Autowired
+    private com.ssrms.service.SeatService seatService;
 
     /**
      * 我的预约列表（按日期倒序，时间正序）
      */
     @GetMapping("/my")
     public Result myReservations(@RequestParam Integer userId) {
-        // 1）查出这个用户的所有预约，按日期倒序、开始时间正序
+
         List<Reservation> list = reservationService.list(
                 Wrappers.<Reservation>lambdaQuery()
                         .eq(Reservation::getUserId, userId)
@@ -78,19 +48,31 @@ public class ReservationController {
         );
 
         if (list.isEmpty()) {
-            // 没有记录也返回成功，data 是空列表，total 是 0
             return Result.success(Collections.emptyList(), 0L);
         }
 
-        // 2）一次性把涉及到的房间都查出来，组一个 map
+        // roomMap（过滤 null，避免 IN (null)）
         Set<Integer> roomIds = list.stream()
                 .map(Reservation::getRoomId)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        Map<Integer, Room> roomMap = roomService.listByIds(roomIds).stream()
-                .collect(Collectors.toMap(Room::getId, r -> r));
+        Map<Integer, Room> roomMap = roomIds.isEmpty()
+                ? Collections.emptyMap()
+                : roomService.listByIds(roomIds).stream()
+                .collect(Collectors.toMap(Room::getId, r -> r, (a, b) -> a));
 
-        // 3）拼装 VO
+        // seatId -> seatNo
+        Set<Integer> seatIds = list.stream()
+                .map(Reservation::getSeatId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Integer, String> seatNoMap = seatIds.isEmpty()
+                ? Collections.emptyMap()
+                : seatService.listByIds(seatIds).stream()
+                .collect(Collectors.toMap(Seat::getId, Seat::getSeatNo, (a, b) -> a));
+
         List<MyReservationVO> voList = list.stream().map(r -> {
             MyReservationVO vo = new MyReservationVO();
             vo.setId(r.getId());
@@ -100,25 +82,30 @@ public class ReservationController {
             vo.setEndTime(r.getEndTime());
             vo.setStatus(r.getStatus());
 
-            Room room = roomMap.get(r.getRoomId());
+            Room room = (r.getRoomId() == null) ? null : roomMap.get(r.getRoomId());
             if (room != null) {
-                String roomName = room.getCampus() + " · "
-                        + room.getBuilding() + " "
-                        + room.getRoomName();
-                vo.setRoomName(roomName);
+                vo.setCampus(room.getCampus());
+                vo.setBuilding(room.getBuilding());
+                vo.setRoomName(room.getRoomName());
+                vo.setRoomLabel(vo.getCampus() + " · " + vo.getBuilding() + " " + vo.getRoomName());
             } else {
-                vo.setRoomName("已删除的自习室(ID=" + r.getRoomId() + ")");
+                vo.setCampus("未知校区");
+                vo.setBuilding("未知建筑");
+                vo.setRoomName("未知自习室");
+                vo.setRoomLabel("未知场地");
             }
 
-            // 暂时座位号就直接用 seatId 转成字符串
-            vo.setSeatLabel(r.getSeatId() == null ? null : String.valueOf(r.getSeatId()));
+            Integer seatId = r.getSeatId();
+            String seatNo = (seatId == null) ? null : seatNoMap.get(seatId);
+            if (seatNo == null || seatNo.isBlank()) seatNo = "未指定";
+            vo.setSeatNo(seatNo);
 
             return vo;
         }).collect(Collectors.toList());
 
-        // 4）用你的 Result.success(Object data, Long total) 返回
         return Result.success(voList, (long) voList.size());
     }
+
 
     /**
      * 学生签到
@@ -159,66 +146,44 @@ public class ReservationController {
      */
     @GetMapping("/violations")
     public Result myViolations(@RequestParam Integer userId) {
+        return reservationService.myViolations(userId);
+    }
 
-        // 1）先刷新一下未签到（把已经结束还没签到的记录标记为 no_show）
-        reservationService.markExpiredAsNoShow(userId);
+    @PostMapping("/create")
+    public Result create(@RequestBody CreateSeatReservationDTO dto) {
+        return reservationService.createSeatReservations(dto);
+    }
 
-        // 2）查出该用户所有 no_show / late 的记录
-        List<Reservation> list = reservationService.list(
-                Wrappers.<Reservation>lambdaQuery()
-                        .eq(Reservation::getUserId, userId)
-                        .in(Reservation::getStatus, Arrays.asList("no_show", "late"))
-                        .orderByDesc(Reservation::getDate)
-                        .orderByAsc(Reservation::getStartTime)
-        );
+    /**
+     * 兼容前端：用于获取时段状态
+     * GET /reservation/slots?roomId=1&date=2025-12-19
+     * 先按“全部可用”返回，避免前端报错（你要做更精细的再升级）
+     */
 
-        if (list.isEmpty()) {
-            return Result.success(Collections.emptyList(), 0L);
+    @GetMapping("/slots")
+    public Result slotStatus(@RequestParam Integer roomId,
+                             @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+        List<SlotStatusVO> list = new ArrayList<>();
+        for (int h = 8; h < 22; h++) {
+            SlotStatusVO vo = new SlotStatusVO();
+            vo.setSlotId(h);
+            vo.setStatus("available");
+            list.add(vo);
         }
+        return Result.success(list);
+    }
 
-        // 3）一次性查出所有相关房间，组 map
-        Set<Integer> roomIds = list.stream()
-                .map(Reservation::getRoomId)
-                .collect(Collectors.toSet());
+    @Data
+    public static class SlotStatusVO {
+        private Integer slotId;
+        private String status;
+    }
 
-        Map<Integer, Room> roomMap = roomService.listByIds(roomIds).stream()
-                .collect(Collectors.toMap(Room::getId, r -> r));
-
-        // 4）组装 VO
-        List<MyViolationVO> voList = list.stream().map(r -> {
-            MyViolationVO vo = new MyViolationVO();
-
-            vo.setReservationId(r.getId());
-            vo.setDate(r.getDate());
-
-            Room room = roomMap.get(r.getRoomId());
-            if (room != null) {
-                String roomFullName = room.getCampus() + " · "
-                        + room.getBuilding() + " "
-                        + room.getRoomName();
-                vo.setRoomFullName(roomFullName);
-            } else {
-                vo.setRoomFullName("已删除的自习室(ID=" + r.getRoomId() + ")");
-            }
-
-            String status = r.getStatus();
-            if ("no_show".equals(status)) {
-                vo.setViolationType("未签到");
-                vo.setPenaltyScore(-2);
-                vo.setRemark("预约后未按时签到");
-            } else if ("late".equals(status)) {
-                vo.setViolationType("迟到");
-                vo.setPenaltyScore(-1);
-                vo.setRemark("超过开始时间较久后才签到");
-            } else {
-                vo.setViolationType(status);
-                vo.setPenaltyScore(0);
-                vo.setRemark("未知类型");
-            }
-
-            return vo;
-        }).collect(Collectors.toList());
-
-        return Result.success(voList, (long) voList.size());
+    @GetMapping("/seatConflicts")
+    public Result seatConflicts(@RequestParam Integer roomId,
+                                @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+                                @RequestParam @DateTimeFormat(pattern = "HH:mm") LocalTime startTime,
+                                @RequestParam @DateTimeFormat(pattern = "HH:mm") LocalTime endTime) {
+        return reservationService.seatConflicts(roomId, date, startTime, endTime);
     }
 }

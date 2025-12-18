@@ -4,17 +4,15 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import App from './App.vue'
 import './assets/global.css'
-import axios from 'axios'
 import router from './router'
 
-axios.defaults.baseURL = 'http://localhost:8090'
+import request from './utils/request'  // ✅ 这里路径按你实际放置改，比如 ./request 或 ./api/request
 
 const app = createApp(App)
 
-// 全局挂载 axios，在组件里用 this.$axios 调
-app.config.globalProperties.$axios = axios
+// ✅ 全局挂载：组件里 this.$axios 就是带拦截器的 service
+app.config.globalProperties.$axios = request
 
 app.use(router)
 app.use(ElementPlus)
-
 app.mount('#app')

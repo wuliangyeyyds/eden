@@ -1,26 +1,27 @@
 // src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
-import LoginPage from '@/components/LoginPage.vue'
-import UserIndex from '@/components/UserIndex.vue'      // 学生端
-import AdminIndex from '@/components/AdminIndex.vue'    // 管理员端
+import LoginRegister from '@/components/LoginRegister.vue' // ✅ 统一登录/注册页面
+import UserIndex from '@/components/UserIndex.vue'         // 学生端
+import AdminIndex from '@/components/AdminIndex.vue'       // 管理员端
 
 const routes = [
     { path: '/', redirect: '/login' },
 
-    { path: '/login', name: 'Login', component: LoginPage },
+    // ✅ 登录页直接使用 LoginRegister
+    { path: '/login', name: 'Login', component: LoginRegister },
 
-    // 学生端，需要登录，角色=student
+    // 学生端，需要登录，role=user
     {
         path: '/user',
         name: 'UserHome',
         component: UserIndex,
         meta: {
             requiresAuth: true,
-            role: 'user'   // 用字符串描述一下角色，方便判断
+            role: 'user'
         }
     },
 
-    // 管理员端，需要登录，角色=admin
+    // 管理员端，需要登录，role=admin
     {
         path: '/admin',
         name: 'AdminHome',
@@ -37,36 +38,45 @@ const router = createRouter({
     routes
 })
 
-// 🌟 路由守卫：这里是真正拦住“直接敲地址”的地方
-router.beforeEach((to, from, next) => {
+// 读取登录用户（更稳：JSON 解析失败就当未登录）
+function getLoginUser () {
     const raw = localStorage.getItem('ssrmsUser')
-    const user = raw ? JSON.parse(raw) : null
+    if (!raw) return null
+    try {
+        return JSON.parse(raw)
+    } catch (e) {
+        localStorage.removeItem('ssrmsUser')
+        return null
+    }
+}
 
-    // 1）需要登录的页面
-    if (to.meta.requiresAuth) {
+router.beforeEach((to, from, next) => {
+    const user = getLoginUser()
+
+    // 1) 需要登录的页面
+    if (to.meta && to.meta.requiresAuth) {
         if (!user) {
-            // 没登录，跳回登录页，还可以带一个 redirect 回来用
             return next({
                 path: '/login',
                 query: { redirect: to.fullPath }
             })
         }
 
-        // 2）按角色检查：roleId 0=管理员,1=学生
+        // 2) 角色检查：roleId 0=管理员, 1=学生
+        //    如果角色不匹配，直接送回“他该去的首页”（体验更好）
         if (to.meta.role === 'admin' && user.roleId !== 0) {
-            return next('/login')
+            return next('/user')
         }
         if (to.meta.role === 'user' && user.roleId !== 1) {
-            return next('/login')
+            return next('/admin')
         }
     }
 
-    // 3）已经登录了又去 /login，就直接丢回对应首页
+    // 3) 已登录又去 /login，就直接回对应首页
     if (to.path === '/login' && user) {
         return next(user.roleId === 0 ? '/admin' : '/user')
     }
 
-    // 其它情况正常放行
     next()
 })
 

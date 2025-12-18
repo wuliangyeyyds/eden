@@ -11,3 +11,7 @@ spring:
 mybatis-plus:
   mapper-locations: classpath*:mapper/*.xml
   type-aliases-package: com.ssrms.entity
+
+ssrms:
+  cors:
+    allowed-origin-patterns: "http://localhost:*,http://127.0.0.1:*,http://你的前端域名,https://你的前端域名"

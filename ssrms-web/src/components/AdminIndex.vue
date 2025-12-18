@@ -21,42 +21,60 @@
 </template>
 
 <script>
-import AdminAside from './AdminAside.vue'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import AdminHeader from './AdminHeader.vue'
+import AdminAside from './AdminAside.vue'
 import AdminHome from './AdminHome.vue'
 
 export default {
   name: 'AdminIndex',
   components: {
-    AdminAside,
     AdminHeader,
+    AdminAside,
     AdminHome
   },
   data () {
     return {
-      currentPage: 'home'
+      currentPage: 'admin-home'
     }
   },
   methods: {
     changePage (page) {
       this.currentPage = page
     },
-    // ⭐ 管理员退出登录
-    handleLogout () {
-      // 1. 清空本地保存的登录信息（按你自己的 key 来）
-      // 学生端我们用的是 ssrmsUser，这里直接一起清掉
-      localStorage.removeItem('ssrmsUser')
-      // 如果你单独给管理员存了一个 key，比如 ssrmsAdmin，可以顺带删掉：
-      localStorage.removeItem('ssrmsAdmin')
-      // 如果还有 token 之类的，也可以一起删：
-      localStorage.removeItem('ssrmsToken')
 
-      // 也可以图省事直接：
-      // localStorage.clear()
+    async handleLogout () {
+      try {
+        await ElMessageBox.confirm(
+            '确定要退出登录吗？',
+            '提示',
+            {
+              confirmButtonText: '退出',
+              cancelButtonText: '取消',
+              type: 'warning'
+            }
+        )
 
-      // 2. 跳回登录页
-      this.$router.replace('/login')
-      // this.$router.push('/login') 也可以，只是 replace 不会留下历史记录
+        // 关键：路由守卫用的是 ssrmsUser，所以必须删它
+        localStorage.removeItem('ssrmsUser')
+
+        // 如果你登录时还存过 token，也顺手清掉（不影响没存的情况）
+        localStorage.removeItem('ssrmsToken')
+        localStorage.removeItem('token')
+        sessionStorage.removeItem('ssrmsUser')
+        sessionStorage.removeItem('ssrmsToken')
+        sessionStorage.removeItem('token')
+
+        // 可选：如果你给 axios 设过默认 Authorization，这里顺手清
+        if (this.$axios && this.$axios.defaults && this.$axios.defaults.headers) {
+          delete this.$axios.defaults.headers.common.Authorization
+        }
+
+        ElMessage.success('已退出登录')
+        this.$router.replace('/login')
+      } catch (e) {
+        // 点了取消就不做任何事
+      }
     }
   }
 }

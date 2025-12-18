@@ -1,22 +1,21 @@
 import axios from 'axios'
 
-// 如果用 CORS 方式，后端开在 8081，就写完整后端地址：
+// Vue CLI：用 process.env，生产默认走 /api（配 Nginx 反代）
+// 开发想直连后端：VUE_APP_API_BASE_URL=http://localhost:8090
+const baseURL =
+    process.env.VUE_APP_API_BASE_URL ||
+    (process.env.NODE_ENV === 'development' ? 'http://localhost:8090' : '/api')
+
 const service = axios.create({
-    baseURL: 'http://localhost:8081', // 你的后端地址（按你实际端口改）
-    timeout: 5000,
+    baseURL,
+    timeout: 10000
 })
 
-// 请求拦截器（可选）
 service.interceptors.request.use(
-    (config) => {
-        // 比如以后要加 token，就在这里加
-        // config.headers['Authorization'] = 'Bearer xxx'
-        return config
-    },
+    (config) => config,
     (error) => Promise.reject(error)
 )
 
-// 响应拦截器（这里直接返回 data）
 service.interceptors.response.use(
     (response) => response.data,
     (error) => Promise.reject(error)

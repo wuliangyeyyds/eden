@@ -9,4 +9,9 @@ import java.util.List;
 public interface UserService extends IService<User> {
 
     User login(String account, String password, Integer roleId);
+
+    boolean existsByAccount(String account);
+
+    User register(String account, String name, String studentNo, String password, Integer roleId);
+
 }

@@ -93,7 +93,6 @@ export default {
 </script>
 
 <style scoped>
-/* 复用 UserAside 的样式 */
 .side {
   width: 260px;
   background-color: #ffffff;
@@ -121,9 +120,9 @@ export default {
   margin-right: 12px;
   font-size: 20px;
 }
-/* 管理员图标特定颜色 */
+
 .admin-logo {
-  background-color: #eff6ff; /* 蓝色系背景 */
+  background-color: #eff6ff;
   color: #1d4ed8;
 }
 
@@ -163,22 +162,12 @@ export default {
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
   text-align: left;
-  height: 44px;      /* 固定每一行高度，方便对齐 */
-  line-height: 1;    /* 避免行高把图标挤歪 */
 }
 
-/* 关键：给图标一个固定宽度的小方块 */
 .menu-item .menu-icon {
-  width: 20px;       /* 所有图标占同样宽度 */
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   font-size: 16px;
-  flex-shrink: 0;    /* 不要被压缩 */
 }
 
-/* 激活状态 */
 .menu-item.active {
   background-color: #eff6ff;
   color: #1d4ed8;

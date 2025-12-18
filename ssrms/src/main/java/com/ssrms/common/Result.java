@@ -40,16 +40,14 @@ public class Result {
     }
 
     public static Result successWithMsg(String msg) {
-        Result r = new Result();
-        r.setCode(200);
-        r.setMsg(msg);
-        return r;
+        return result(200, msg, 0L, null);
     }
 
     public static Result failWithMsg(String msg) {
-        Result r = new Result();
-        r.setCode(500);
-        r.setMsg(msg);
-        return r;
+        return result(400, msg, 0L, null);
+    }
+
+    public static Result errorWithMsg(String msg) {
+        return result(500, msg, 0L, null);
     }
 }

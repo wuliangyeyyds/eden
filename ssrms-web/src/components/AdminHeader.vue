@@ -28,8 +28,8 @@ export default {
         'admin-reservations': '预约管理',
         'admin-users': '用户管理',
         'admin-seats': '座位管理',
-        'admin-complaints': '投诉管理',
-        'admin-logs': '日志与统计'
+        'admin-complaints': '投诉处理',
+        'admin-logs': '日志统计'
       }
       return map[this.currentPage] || '管理员后台'
     }
@@ -43,7 +43,6 @@ export default {
 </script>
 
 <style scoped>
-/* 样式与 UserHeader 完全一致 */
 .topbar {
   height: 56px;
   background-color: #ffffff;
