@@ -5,11 +5,11 @@
    - 可反复执行：会 drop 旧表再重建
    ========================================================= */
 
-CREATE DATABASE IF NOT EXISTS `ssrms`
+CREATE DATABASE IF NOT EXISTS `ssrms-db`
     DEFAULT CHARACTER SET utf8mb4
     COLLATE utf8mb4_general_ci;
 
-USE `ssrms`;
+USE `ssrms-db`;
 SET NAMES utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 0;

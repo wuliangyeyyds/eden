@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ssrms.common.Result;
 import com.ssrms.controller.dto.CreateSeatReservationDTO;
-import com.ssrms.controller.vo.MyViolationVO;
+import com.ssrms.controller.vo.*;
 import com.ssrms.entity.*;
 import com.ssrms.mapper.ReservationMapper;
 import com.ssrms.mapper.UserMapper;
@@ -26,9 +26,6 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.ssrms.controller.vo.AdminReservationPageVO;
-import com.ssrms.controller.vo.AdminReservationRowVO;
-import com.ssrms.controller.vo.AdminReservationStatsVO;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -920,6 +917,11 @@ public class ReservationServiceImpl
             case "cancel_overdue" -> "逾期取消";
             default -> "-";
         };
+    }
+
+    @Override
+    public List<MyReservationVO> listMyReservations(Long userId, Boolean onlyPending, Boolean onlyViolation) {
+        return this.baseMapper.selectMyReservations(userId, onlyPending, onlyViolation);
     }
 
 }

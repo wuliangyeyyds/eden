@@ -3,6 +3,7 @@ package com.ssrms.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ssrms.common.Result;
 import com.ssrms.controller.dto.CreateSeatReservationDTO;
+import com.ssrms.controller.vo.MyReservationVO;
 import com.ssrms.entity.Reservation;
 
 import java.time.LocalDate;
@@ -44,4 +45,6 @@ public interface ReservationService extends IService<Reservation> {
 
     /** 批量取消预约 */
     Result adminBatchCancel(List<Long> ids);
+
+    List<MyReservationVO> listMyReservations(Long userId, Boolean onlyPending, Boolean onlyViolation);
 }

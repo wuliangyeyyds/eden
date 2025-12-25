@@ -629,12 +629,6 @@
             </button>
           </div>
 
-
-          <p class="hint-text hint-warn" v-if="isUserBlacklisted">
-            你的账号当前处于黑名单/受限状态：可以正常登录与查看信息，但预约功能已被禁用（如需恢复请联系管理员）。
-          </p>
-
-
           <p class="hint-text">
             先点击“添加”将当前选择加入下方列表，最后点击“确认预约”提交，并跳转到“我的预约”。
           </p>
@@ -1459,14 +1453,6 @@ export default {
       return cur ? cur.fullLabel : null
     },
 
-
-    // ✅ 黑名单/受限状态：允许登录，但禁止预约（前端禁用按钮 + 后端再兜底拦截）
-    isUserBlacklisted () {
-      const u = this.getStoredUser()
-      const v = Number(u?.blacklistFlag ?? u?.blacklist_flag ?? u?.status ?? 0)
-      return v !== 0
-    },
-
     // 开始时间：08~22；结束时间：09~23（且必须 > startHour）
     startHourOptions () {
       const arr = []
@@ -1545,12 +1531,11 @@ export default {
           && !!this.selectedSeatNo
           && !this.rangeHasConflict
           && !this.isDuplicateTempReservation
-          && !this.isUserBlacklisted
           && this.tempReservations.length < 4
     },
 
     canSubmitReservation () {
-      return this.tempReservations.length > 0 && !this.submittingReservations && !this.isUserBlacklisted
+      return this.tempReservations.length > 0 && !this.submittingReservations
     },
 
     totalPages () {
@@ -1691,7 +1676,7 @@ export default {
     creditRiskTip () {
       const s = Number(this.currentCreditScore || 0)
       if (s < 60) return '信用分低于 60 可能会被列入黑名单，一段时间内无法预约。'
-      if (s < 80) return '信用分低于 80 会被列入预警名单；建议保持按时签到，避免迟到或未签到。'
+      if (s < 80) return '信用分低于 60 会被列入黑名单；建议保持按时签到，避免迟到或未签到。'
       return '信用分低于 60 会被列入黑名单；继续保持按时签到。'
     },
 
@@ -2060,11 +2045,6 @@ export default {
 
     async submitReservations () {
       if (!this.canSubmitReservation) return
-      if (this.isUserBlacklisted) {
-        alert('您已被加入黑名单，暂无法预约。如需恢复请联系管理员。')
-        return
-      }
-
       if (!this.ensureCurrentUserId()) {
         alert('请先登录后再预约')
         return
@@ -3848,19 +3828,6 @@ export default {
   padding: 8px 20px;
 }
 
-.hint-text {
-  text-align: center;
-  margin-top: 10px;
-  font-size: 12px;
-  color: #6b7280;
-  line-height: 1.5;
-}
-
-.hint-text.hint-warn {
-  color: #dc2626;
-}
-
-
 .primary-btn {
   border: none;
   border-radius: 999px;
@@ -5278,12 +5245,12 @@ export default {
 /* 扣分 ↔ 备注：增加两列之间的“空隙感”（不影响其它列） */
 .violation-record-card .violation-table th.col-penalty,
 .violation-record-card .violation-table td.col-penalty{
-  padding-right: calc(var(--vio-col-pad-x) + 8px);
+  padding-right: calc(var(--vio-col-pad-x) + 14px);
 }
 
 .violation-record-card .violation-table th.col-remark,
 .violation-record-card .violation-table td.col-remark{
-  padding-left: calc(var(--vio-col-pad-x) + 8px);
+  padding-left: calc(var(--vio-col-pad-x) + 14px);
   padding-right: calc(var(--vio-col-pad-x) + 10px);
 }
 

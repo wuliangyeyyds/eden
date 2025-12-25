@@ -1017,281 +1017,7 @@
       </el-dialog>
     </div>
 
-    <!-- ============ 座位管理（整合版） ============ -->
-    <div v-else-if="currentPage === 'admin-seats'" class="seat-manage">
-      <!-- 顶部：标题 + 当前选择 -->
-      <div class="card seat-head-card">
-        <div class="seat-head-row">
-          <div class="seat-head-left">
-            <h2 class="page-title">座位管理</h2>
-            <p class="page-subtitle">
-              按楼栋、自习室配置开放状态与座位布局，支持快速禁用问题座位，并设置预约规则与开放时间。
-            </p>
-          </div>
-        </div>
 
-        <div class="seat-filter-row">
-          <div class="seat-filter-left">
-            <el-select v-model="currentCampus" size="small" class="top-select" placeholder="选择校区" :teleported="false">
-              <el-option v-for="item in campusOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-
-            <el-select v-model="currentBuild" size="small" class="top-select" placeholder="选择楼栋" clearable :teleported="false">
-              <el-option v-for="item in buildOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-
-            <label class="seat-filter-switch">
-              <span>仅显示开放</span>
-              <el-switch v-model="onlyShowOpen" size="small" />
-            </label>
-
-            <div class="seat-filter-actions">
-              <el-button size="small" type="primary" plain>新建自习室</el-button>
-              <el-button size="small" plain>导出全局配置</el-button>
-            </div>
-          </div>
-
-          <div class="seat-summary-box seat-summary-inline">
-            <div class="summary-title">
-              <span class="summary-dot"></span>
-              <span>当前选择</span>
-            </div>
-            <div class="summary-grid">
-              <div class="summary-item">
-                <div class="summary-label">校区</div>
-                <div class="summary-value">
-                  {{ currentCampus === 'main' ? '本部校区' : (currentCampus === 'east' ? '东校区' : currentCampus) }}
-                </div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-label">楼栋</div>
-                <div class="summary-value">
-                  {{ currentBuild ? (currentBuild === '3F' ? '3 号教学楼' : (currentBuild === 'LIB' ? '图书馆' : currentBuild)) : '全部楼栋' }}
-                </div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-label">自习室</div>
-                <div class="summary-value">{{ selectedRoom ? selectedRoom.name : '未选择' }}</div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-label">筛选</div>
-                <div class="summary-value">
-                  <span class="mini-pill" :class="{ on: onlyShowOpen }">{{ onlyShowOpen ? '仅开放' : '全部' }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 主体：左侧自习室列表 + 右侧布局/规则 -->
-      <div class="seat-layout">
-        <div class="card seat-left-card">
-          <div class="left-header">
-            <div class="left-header-main">
-              <h3 class="left-title">自习室列表</h3>
-              <p class="left-subtitle">支持关键词与容量筛选，点击查看座位布局。</p>
-            </div>
-          </div>
-
-          <div class="left-filter">
-            <el-input v-model="roomKeyword" placeholder="按名称 / 楼层 / 楼栋搜索" clearable size="small" class="left-filter-input">
-              <template #prefix><span class="input-prefix-icon">🔍</span></template>
-            </el-input>
-
-            <el-radio-group v-model="roomCapacityFilter" size="small" class="capacity-radio">
-              <el-radio-button label="all">全部容量</el-radio-button>
-              <el-radio-button label="small">≤40 人</el-radio-button>
-              <el-radio-button label="medium">40-80 人</el-radio-button>
-              <el-radio-button label="large">≥80 人</el-radio-button>
-            </el-radio-group>
-          </div>
-
-          <div class="room-list-wrap">
-            <el-scrollbar height="520px" class="room-scroll">
-              <div class="room-list">
-                <div
-                    v-for="room in filteredRooms"
-                    :key="room.id"
-                    class="room-item"
-                    :class="{ active: room.id === selectedRoomId, closed: room.status !== 'open' }"
-                    @click="handleSelectRoom(room)"
-                >
-                  <div class="room-item-main">
-                    <div class="room-item-title">{{ room.name }}</div>
-                    <div class="room-item-sub">{{ room.building }} · {{ room.floor }}层 · 容量 {{ room.capacity }}</div>
-                  </div>
-
-                  <div class="room-item-meta">
-                    <div class="room-item-usage">{{ room.usedSeats }}/{{ room.capacity }}</div>
-                    <el-tag size="small" :type="room.status === 'open' ? 'success' : 'info'">
-                      {{ room.status === 'open' ? '开放中' : '未开放' }}
-                    </el-tag>
-                  </div>
-
-                  <div class="room-item-actions">
-                    <el-button type="primary" link size="small" @click.stop="toggleRoomOpen(room)">
-                      {{ room.status === 'open' ? '关闭' : '开放' }}
-                    </el-button>
-                    <el-button type="info" link size="small" @click.stop="handleEditRoom(room)">设置</el-button>
-                  </div>
-                </div>
-
-                <div v-if="!filteredRooms.length" class="room-empty">
-                  暂无匹配自习室
-                </div>
-              </div>
-            </el-scrollbar>
-          </div>
-        </div>
-
-        <div class="seat-right">
-          <div class="card seat-right-card">
-            <div class="right-header">
-              <div>
-                <h3 class="right-title">{{ selectedRoom ? selectedRoom.name : '请选择左侧自习室' }}</h3>
-                <p class="right-subtitle" v-if="selectedRoom">
-                  {{ selectedRoom.building }} · {{ selectedRoom.floor }}层 · 共 {{ selectedRoom.capacity }} 个座位
-                </p>
-                <p class="right-subtitle" v-else>在左侧选择一个自习室即可编辑座位布局与预约规则。</p>
-              </div>
-
-              <div class="right-header-actions" v-if="selectedRoom">
-                <label class="seat-filter-switch">
-                  <span>当前自习室开放</span>
-                  <el-switch v-model="selectedRoom.statusModel" size="small" @change="syncRoomStatus" />
-                </label>
-                <el-button size="small" plain>导出座位配置</el-button>
-              </div>
-            </div>
-
-            <template v-if="selectedRoom">
-              <div class="seat-stats seat-stats-compact">
-                <div class="stat-card">
-                  <div class="stat-label">可预约</div>
-                  <div class="stat-value">{{ seatStats.free }}</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">已占用</div>
-                  <div class="stat-value">{{ seatStats.occupied }}</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">禁用</div>
-                  <div class="stat-value">{{ seatStats.disabled }}</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">封锁区域</div>
-                  <div class="stat-value">{{ seatStats.blockedArea }}</div>
-                </div>
-              </div>
-
-              <el-tabs v-model="activeTab" class="seat-tabs">
-                <el-tab-pane label="座位布局" name="layout">
-                  <div class="layout-toolbar">
-                    <div class="layout-toolbar-left">
-                      <label class="seat-filter-switch">
-                        <span>显示座位编号</span>
-                        <el-switch v-model="showSeatNo" size="small" />
-                      </label>
-                      <label class="seat-filter-switch">
-                        <span>占用示意</span>
-                        <el-switch v-model="showDemoOccupied" size="small" />
-                      </label>
-                    </div>
-
-                    <div class="layout-toolbar-right">
-                      <el-button size="small" plain @click="handleBatchDisable">批量禁用选中</el-button>
-                      <el-button size="small" plain @click="handleClearSelection">清空选择</el-button>
-                    </div>
-                  </div>
-
-                  <div class="seat-legend">
-                    <div class="legend-item"><span class="legend-dot legend-free" /> 可预约</div>
-                    <div class="legend-item"><span class="legend-dot legend-occupied" /> 已占用</div>
-                    <div class="legend-item"><span class="legend-dot legend-disabled" /> 禁用</div>
-                    <div class="legend-item"><span class="legend-dot legend-selected" /> 当前选择</div>
-                  </div>
-
-                  <div class="seat-grid">
-                    <div v-for="row in seatGrid" :key="row.rowIndex" class="seat-row">
-                      <div class="seat-row-label">第 {{ row.rowIndex + 1 }} 行</div>
-                      <div class="seat-row-seats">
-                        <button
-                            v-for="seat in row.seats"
-                            :key="seat.id"
-                            type="button"
-                            class="seat-cell"
-                            :class="seatCellClass(seat)"
-                            @click="handleSeatClick(seat)"
-                        >
-                          <span class="seat-no" v-if="showSeatNo">{{ seat.label }}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="seat-hint">
-                    点击座位可选中/取消选中；“批量禁用”会将选中座位置为禁用状态。
-                  </div>
-                </el-tab-pane>
-
-                <el-tab-pane label="预约规则与开放时间" name="rules">
-                  <el-form :model="seatRule" label-width="150px" size="small" class="rule-form">
-                    <el-form-item label="是否允许跨时段预约">
-                      <el-switch v-model="seatRule.allowCrossTime" />
-                      <span class="item-desc">开启后可一次预约多个连续时段</span>
-                    </el-form-item>
-
-                    <el-form-item label="单次最长预约时长">
-                      <div class="inline-group">
-                        <el-input-number v-model="seatRule.maxHoursPerOrder" :min="1" :max="12" />
-                        <span class="item-desc">小时</span>
-                      </div>
-                    </el-form-item>
-
-                    <el-form-item label="每日最多预约次数">
-                      <el-input-number v-model="seatRule.maxOrdersPerDay" :min="1" :max="6" />
-                    </el-form-item>
-
-                    <el-form-item label="未签到自动释放">
-                      <el-switch v-model="seatRule.autoReleaseNoSign" />
-                      <span class="item-desc">开启后将自动取消未按时签到预约</span>
-                    </el-form-item>
-
-                    <el-form-item label="释放阈值（分钟）" v-if="seatRule.autoReleaseNoSign">
-                      <el-input-number v-model="seatRule.releaseAfterMinutes" :min="5" :max="60" />
-                    </el-form-item>
-
-                    <el-form-item label="违约处理策略">
-                      <el-select v-model="seatRule.violationStrategy" placeholder="请选择" :teleported="false">
-                        <el-option label="当天禁止再次预约" value="day-ban" />
-                        <el-option label="扣除信用分" value="score" />
-                        <el-option label="加入预警名单" value="warn" />
-                      </el-select>
-                    </el-form-item>
-
-                    <el-form-item label="自习室说明">
-                      <el-input v-model="seatRule.description" type="textarea" :rows="4" maxlength="200" show-word-limit placeholder="填写自习室开放说明、注意事项等" />
-                    </el-form-item>
-
-                    <el-form-item>
-                      <el-button type="primary">保存规则配置</el-button>
-                      <el-button>重置</el-button>
-                    </el-form-item>
-                  </el-form>
-                </el-tab-pane>
-              </el-tabs>
-            </template>
-
-            <div v-else class="seat-empty-state">
-              <div class="empty-title">还没有选中自习室</div>
-              <div class="empty-desc">从左侧列表选择一个自习室后，这里会显示座位布局与预约规则配置。</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- ============ 投诉处理（Admin Feedback） ============ -->
     <div v-if="currentPage === 'admin-complaints'" class="complaints-page">
       <div class="card complaints-head">
         <div class="complaints-head-left">
@@ -1546,13 +1272,7 @@
       </el-drawer>
     </div>
     <!-- ============ 日志统计（占位页，保留入口不丢功能） ============ -->
-    <div v-if="currentPage === 'admin-logs'" class="card simple-card">
-      <h2 class="page-title">日志统计</h2>
-      <p class="page-subtitle">查看系统操作日志与统计信息，辅助排查问题与追踪操作记录。</p>
-      <p class="simple-tip">
-        可以在此接入折线图/柱状图展示日预约量、签到率、违约率等统计数据。
-      </p>
-    </div>
+
   </div>
 </template>
 
@@ -1700,7 +1420,7 @@ export default {
           id: 2,
           type: 'violation',
           content: '检查本周连续违约超过 3 次的学生名单。',
-          from: '日志统计',
+          from: '后台管理',
           time: '2025-12-10 08:50',
           priority: 'medium'
         },
@@ -1708,7 +1428,7 @@ export default {
           id: 3,
           type: 'rule',
           content: '确认期末考试周自习室开放时间与预约上限。',
-          from: '座位管理',
+          from: '后台管理',
           time: '2025-12-09 16:10',
           priority: 'medium'
         },
@@ -1716,7 +1436,7 @@ export default {
           id: 4,
           type: 'system',
           content: '导出本月预约与签到报表存档。',
-          from: '日志统计',
+          from: '后台管理',
           time: '2025-12-09 10:25',
           priority: 'low'
         }
@@ -1942,6 +1662,11 @@ export default {
     }},
   watch: {
     currentPage (val) {
+      // 已移除：座位管理 / 日志统计
+      if (val === 'admin-seats' || val === 'admin-logs') {
+        this.emitChange('admin-home')
+        return
+      }
       if (val !== 'admin-home') this.stopDashboardTimer()
       else if (this.autoRefresh) this.startDashboardTimer()
 
@@ -2340,11 +2065,8 @@ export default {
       return '低'
     },
     handleTodoGo (row) {
-      // 让“前往处理”真的能跳页（整合后可用）
       if (row.type === 'complaint') return this.emitChange('admin-complaints')
-      if (row.type === 'rule') return this.emitChange('admin-seats')
-      // violation / system 统一引导到日志统计
-      return this.emitChange('admin-logs')
+      return this.emitChange('admin-home')
     },
     handleTodoDone (row) {
       this.todos = this.todos.filter(t => t.id !== row.id)

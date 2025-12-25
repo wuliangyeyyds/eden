@@ -44,16 +44,6 @@
       <button
           type="button"
           class="menu-item"
-          :class="{ active: currentPage === 'admin-seats' }"
-          @click="emitChange('admin-seats')"
-      >
-        <span class="menu-icon">🪑</span>
-        <span>座位管理</span>
-      </button>
-
-      <button
-          type="button"
-          class="menu-item"
           :class="{ active: currentPage === 'admin-complaints' }"
           @click="emitChange('admin-complaints')"
       >
@@ -61,15 +51,6 @@
         <span>投诉处理</span>
       </button>
 
-      <button
-          type="button"
-          class="menu-item"
-          :class="{ active: currentPage === 'admin-logs' }"
-          @click="emitChange('admin-logs')"
-      >
-        <span class="menu-icon">📑</span>
-        <span>日志统计</span>
-      </button>
     </nav>
   </aside>
 </template>
