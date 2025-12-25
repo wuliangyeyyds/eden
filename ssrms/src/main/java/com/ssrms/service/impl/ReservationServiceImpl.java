@@ -1,5 +1,7 @@
 package com.ssrms.service.impl;
 
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ssrms.common.Result;
@@ -19,9 +21,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ssrms.controller.vo.AdminReservationPageVO;
+import com.ssrms.controller.vo.AdminReservationRowVO;
+import com.ssrms.controller.vo.AdminReservationStatsVO;
+import org.springframework.util.StringUtils;
 
 @Service
 public class ReservationServiceImpl
@@ -43,6 +51,11 @@ public class ReservationServiceImpl
     private static final int PENALTY_LATE = 1;
     private static final int PENALTY_NO_SHOW = 2;
 
+
+    private static final DateTimeFormatter F_HM = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter F_YMD = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter F_YMDHMS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     // =========================
     // 1) 签到：状态更新 +（必要时）违规落库/扣分
     // =========================
@@ -50,13 +63,13 @@ public class ReservationServiceImpl
     @Transactional(rollbackFor = Exception.class)
     public Result checkIn(Long reservationId) {
         Reservation r = this.getById(reservationId);
-        if (r == null) return Result.fail("预约记录不存在");
-        if (!"reserved".equals(r.getStatus())) return Result.fail("当前状态不允许签到");
+        if (r == null) return Result.failWithMsg("预约记录不存在");
+        if (!"reserved".equals(r.getStatus())) return Result.failWithMsg("当前状态不允许签到");
 
         LocalDate date = r.getDate();
         LocalTime startTime = r.getStartTime();
         LocalTime endTime = r.getEndTime();
-        if (date == null || startTime == null || endTime == null) return Result.fail("预约记录的时间信息不完整");
+        if (date == null || startTime == null || endTime == null) return Result.failWithMsg("预约记录的时间信息不完整");
 
         LocalDateTime start = LocalDateTime.of(date, startTime);
         LocalDateTime end = LocalDateTime.of(date, endTime);
@@ -66,7 +79,7 @@ public class ReservationServiceImpl
         LocalDateTime lateLine = start.plusMinutes(10);
 
         if (now.isBefore(earliest)) {
-            return Result.fail("未到签到时间，请在开始前 10 分钟内再尝试");
+            return Result.failWithMsg("未到签到时间，请在开始前 10 分钟内再尝试");
         }
 
         // 超过结束时间：直接 no_show + 违规落库/扣分（防重复）
@@ -108,8 +121,8 @@ public class ReservationServiceImpl
     @Override
     public Result cancel(Long reservationId) {
         Reservation r = this.getById(reservationId);
-        if (r == null) return Result.fail("预约记录不存在");
-        if (!"reserved".equals(r.getStatus())) return Result.fail("当前状态不能取消");
+        if (r == null) return Result.failWithMsg("预约记录不存在");
+        if (!"reserved".equals(r.getStatus())) return Result.failWithMsg("当前状态不能取消");
 
         LocalDate date = r.getDate();
         LocalTime startTime = r.getStartTime();
@@ -118,7 +131,7 @@ public class ReservationServiceImpl
 
         LocalDateTime latestCancelTime = startDateTime.minusMinutes(10);
         if (now.isAfter(latestCancelTime)) {
-            return Result.fail("距离开始时间不足 10 分钟，无法取消预约");
+            return Result.failWithMsg("距离开始时间不足 10 分钟，无法取消预约");
         }
 
         LocalDateTime normalCancelDeadline = startDateTime.minusDays(1);
@@ -183,7 +196,7 @@ public class ReservationServiceImpl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Result myViolations(Integer userId) {
-        if (userId == null) return Result.fail("userId不能为空");
+        if (userId == null) return Result.failWithMsg("userId不能为空");
 
         // 1) 先刷新 no_show（本方法内部已统一落库/扣分）
         markExpiredAsNoShow(userId);
@@ -384,15 +397,51 @@ public class ReservationServiceImpl
                 || dto.getEndTime() == null
                 || dto.getSeatNos() == null
                 || dto.getSeatNos().isEmpty()) {
-            return Result.fail("参数不完整");
+            return Result.failWithMsg("参数不完整");
         }
 
         if (!dto.getStartTime().isBefore(dto.getEndTime())) {
-            return Result.fail("时间段不合法");
+            return Result.failWithMsg("时间段不合法");
         }
 
+        // ✅ 黑名单限制：允许登录，但禁止预约（避免“黑名单无法登录”体验）
+        // 兼容两种库字段：
+        // 1) 你当前代码/SQL里是 blacklist_flag（0-正常，非0-黑名单）
+        // 2) 你提到的 status=2 表示黑名单（如果你的库里确实有 status 字段）
+        Integer blacklist = null;
+        Integer status = null;
+        try {
+            // 用 map 读库字段，避免实体没有 status 字段时取不到值
+            com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<User> qw =
+                    new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<User>()
+                            .select("blacklist_flag", "status")
+                            .eq("id", dto.getUserId())
+                            .last("LIMIT 1");
+            List<Map<String, Object>> maps = userMapper.selectMaps(qw);
+            if (maps != null && !maps.isEmpty()) {
+                Map<String, Object> m = maps.get(0);
+                Object b = m.get("blacklist_flag");
+                Object s = m.get("status");
+                if (b != null) blacklist = Integer.valueOf(String.valueOf(b));
+                if (s != null) status = Integer.valueOf(String.valueOf(s));
+            } else {
+                return Result.failWithMsg("用户不存在");
+            }
+        } catch (Exception ignore) {
+            // 如果你的库里没有 status 字段，上面的 select 可能报错：那就退回到实体字段 blacklistFlag 判定
+            User u = userMapper.selectById(dto.getUserId());
+            if (u == null) return Result.failWithMsg("用户不存在");
+            blacklist = u.getBlacklistFlag();
+        }
+
+        boolean isBlacklisted = (blacklist != null && blacklist != 0) || (status != null && status == 2);
+        if (isBlacklisted) {
+            return Result.failWithMsg("您已被加入黑名单，暂无法预约。如需恢复请联系管理员。");
+        }
+
+
         if (dto.getSeatNos().size() > 4) {
-            return Result.fail("一次最多预约 4 个座位");
+            return Result.failWithMsg("一次最多预约 4 个座位");
         }
 
         List<String> seatNos = dto.getSeatNos().stream()
@@ -403,7 +452,7 @@ public class ReservationServiceImpl
                 .collect(Collectors.toList());
 
         if (seatNos.size() != dto.getSeatNos().size()) {
-            return Result.fail("座位号重复");
+            return Result.failWithMsg("座位号重复");
         }
 
         List<Seat> seats = seatService.list(
@@ -416,12 +465,12 @@ public class ReservationServiceImpl
         if (seats.size() != seatNos.size()) {
             Set<String> found = seats.stream().map(Seat::getSeatNo).collect(Collectors.toSet());
             List<String> missing = seatNos.stream().filter(s -> !found.contains(s)).toList();
-            return Result.fail("座位不存在或不可用: " + String.join(",", missing));
+            return Result.failWithMsg("座位不存在或不可用: " + String.join(",", missing));
         }
 
         long minutes = java.time.temporal.ChronoUnit.MINUTES.between(dto.getStartTime(), dto.getEndTime());
-        if (minutes <= 0) return Result.fail("时间段不合法");
-        if (minutes > 240) return Result.fail("单次最多预约 4 小时");
+        if (minutes <= 0) return Result.failWithMsg("时间段不合法");
+        if (minutes > 240) return Result.failWithMsg("单次最多预约 4 小时");
 
         for (Seat seat : seats) {
             List<Reservation> conflicts = this.list(
@@ -442,7 +491,7 @@ public class ReservationServiceImpl
                                 r.getEndTime().toString()))
                         .distinct()
                         .toList();
-                return Result.fail(String.join("\n", lines));
+                return Result.failWithMsg(String.join("\n", lines));
             }
         }
 
@@ -533,4 +582,344 @@ public class ReservationServiceImpl
 
         return Result.success(map);
     }
+
+    /* ===================== 管理员预约管理 ===================== */
+
+    @Override
+    public Result adminPage(String keyword, Integer roomId, LocalDate date, String status, long page, long size) {
+        long p = page <= 0 ? 1 : page;
+        long s = size <= 0 ? 8 : size;
+
+        String kw = keyword == null ? "" : keyword.trim();
+        String st = status == null ? "" : status.trim();
+
+        List<Integer> userIds = findUserIdsByKeyword(kw);
+
+        LambdaQueryWrapper<Reservation> qw = Wrappers.<Reservation>lambdaQuery();
+        applyAdminBaseFilters(qw, kw, roomId, date, userIds);
+
+        if (StringUtils.hasText(st)) {
+            String stLower = st.toLowerCase();
+            if ("violation".equals(stLower)) {
+                qw.in(Reservation::getStatus, Arrays.asList("late", "no_show"));
+            } else if ("cancelled".equals(stLower)) {
+                qw.in(Reservation::getStatus, Arrays.asList("cancelled", "cancel_overdue"));
+            } else {
+                qw.eq(Reservation::getStatus, stLower);
+            }
+        }
+
+        qw.orderByDesc(Reservation::getDate)
+                .orderByDesc(Reservation::getStartTime)
+                .orderByDesc(Reservation::getId);
+
+        Page<Reservation> mp = this.page(new Page<>(p, s), qw);
+        List<Reservation> records = mp.getRecords();
+
+        // 批量补齐 user / room / seat
+        Set<Integer> uids = new HashSet<>();
+        Set<Integer> rids = new HashSet<>();
+        Set<Integer> sids = new HashSet<>();
+        for (Reservation r : records) {
+            if (r.getUserId() != null) uids.add(r.getUserId());
+            if (r.getRoomId() != null) rids.add(r.getRoomId());
+            if (r.getSeatId() != null) sids.add(r.getSeatId());
+        }
+
+        Map<Integer, User> userMap = new HashMap<>();
+        if (!uids.isEmpty()) {
+            List<User> us = userMapper.selectBatchIds(uids);
+            if (us != null) for (User u : us) userMap.put(u.getId(), u);
+        }
+
+        Map<Integer, Room> roomMap = new HashMap<>();
+        if (!rids.isEmpty()) {
+            List<Room> rms = roomService.listByIds(rids);
+            if (rms != null) for (Room rm : rms) roomMap.put(rm.getId(), rm);
+        }
+
+        Map<Integer, Seat> seatMap = new HashMap<>();
+        if (!sids.isEmpty()) {
+            List<Seat> sts = seatService.listByIds(sids);
+            if (sts != null) for (Seat seat : sts) seatMap.put(seat.getId(), seat);
+        }
+
+        List<AdminReservationRowVO> voList = new ArrayList<>();
+        for (Reservation r : records) {
+            AdminReservationRowVO vo = new AdminReservationRowVO();
+            vo.setId(r.getId());
+            // VO字段名为 code，对应 reservation_no
+            vo.setCode(r.getReservationNo());
+            vo.setUserId(r.getUserId());
+            vo.setRoomId(r.getRoomId());
+            vo.setSeatId(r.getSeatId());
+
+            User u = userMap.get(r.getUserId());
+            vo.setStudentName(u == null ? "-" : (u.getName() == null ? "-" : u.getName()));
+            vo.setStudentNo(u == null ? "-" : (u.getStudentNo() == null ? "-" : u.getStudentNo()));
+
+            Room rm = roomMap.get(r.getRoomId());
+            if (rm != null) {
+                String label = (rm.getCampus() == null ? "" : rm.getCampus())
+                        + " · "
+                        + (rm.getBuilding() == null ? "" : rm.getBuilding())
+                        + " "
+                        + (rm.getRoomName() == null ? "" : rm.getRoomName());
+                vo.setRoom(label.trim().isEmpty() ? "-" : label.trim());
+            } else {
+                vo.setRoom("-");
+            }
+
+            Seat seat = seatMap.get(r.getSeatId());
+            vo.setSeatNo(seat == null ? "-" : (seat.getSeatNo() == null ? "-" : seat.getSeatNo()));
+
+            vo.setDate(r.getDate() == null ? "-" : r.getDate().format(F_YMD));
+
+            if (r.getStartTime() == null || r.getEndTime() == null) {
+                vo.setTimeRange("-");
+            } else {
+                vo.setTimeRange(r.getStartTime().format(F_HM) + "-" + r.getEndTime().format(F_HM));
+            }
+
+            vo.setStatus(r.getStatus());
+            vo.setRemark(statusRemark(r.getStatus()));
+            vo.setCheckinTime(r.getCheckinTime() == null ? "-" : r.getCheckinTime().format(F_YMDHMS));
+
+            voList.add(vo);
+        }
+
+        AdminReservationStatsVO stats = buildAdminStats(kw, roomId, date);
+
+        AdminReservationPageVO data = new AdminReservationPageVO();
+        data.setRecords(voList);
+        data.setStats(stats);
+
+        return Result.success(data, mp.getTotal());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result adminForceCheckin(Long reservationId) {
+        Reservation r = this.getById(reservationId);
+        if (r == null) return Result.failWithMsg("预约记录不存在");
+
+        String st = r.getStatus() == null ? "" : r.getStatus().trim().toLowerCase();
+        if (!"late".equals(st) && !"no_show".equals(st)) {
+            return Result.failWithMsg("仅支持对【未签到/迟到】记录补录签到");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        Reservation upd = new Reservation();
+        upd.setId(r.getId());
+        upd.setStatus("checked_in");
+        upd.setCheckinTime(now);
+        upd.setUpdateTime(now);
+        this.updateById(upd);
+
+        // 可选：把该预约对应的 late/no_show 违规标记为已处理
+        violationMapper.update(
+                null,
+                Wrappers.<Violation>lambdaUpdate()
+                        .eq(Violation::getReservationId, r.getId())
+                        .in(Violation::getVType, Arrays.asList("late", "no_show"))
+                        .set(Violation::getHandled, 1)
+        );
+
+        return Result.successWithMsg("补录签到成功");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result adminBatchCheckin(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return Result.failWithMsg("请选择要补录的记录");
+
+        List<Reservation> list = this.listByIds(ids);
+        if (list == null || list.size() != ids.size()) {
+            return Result.failWithMsg("存在无效记录（已被删除），请刷新后重试");
+        }
+
+        for (Reservation r : list) {
+            String st = r.getStatus() == null ? "" : r.getStatus().trim().toLowerCase();
+            if (!"late".equals(st) && !"no_show".equals(st)) {
+                return Result.failWithMsg("批量补录仅支持对【未签到/迟到】记录操作");
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        for (Reservation r : list) {
+            Reservation upd = new Reservation();
+            upd.setId(r.getId());
+            upd.setStatus("checked_in");
+            upd.setCheckinTime(now);
+            upd.setUpdateTime(now);
+            this.updateById(upd);
+
+            violationMapper.update(
+                    null,
+                    Wrappers.<Violation>lambdaUpdate()
+                            .eq(Violation::getReservationId, r.getId())
+                            .in(Violation::getVType, Arrays.asList("late", "no_show"))
+                            .set(Violation::getHandled, 1)
+            );
+        }
+
+        return Result.successWithMsg("批量补录签到成功：" + ids.size() + " 条");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result adminForceCancel(Long reservationId) {
+        Reservation r = this.getById(reservationId);
+        if (r == null) return Result.failWithMsg("预约记录不存在");
+
+        String st = r.getStatus() == null ? "" : r.getStatus().trim().toLowerCase();
+        if (!"reserved".equals(st)) {
+            return Result.failWithMsg("仅支持对【已预约】记录取消预约");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Reservation upd = new Reservation();
+        upd.setId(r.getId());
+        upd.setStatus("cancelled");
+        upd.setUpdateTime(now);
+        this.updateById(upd);
+
+        return Result.successWithMsg("取消预约成功");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result adminBatchCancel(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return Result.failWithMsg("请选择要取消的记录");
+
+        List<Reservation> list = this.listByIds(ids);
+        if (list == null || list.size() != ids.size()) {
+            return Result.failWithMsg("存在无效记录（已被删除），请刷新后重试");
+        }
+
+        for (Reservation r : list) {
+            String st = r.getStatus() == null ? "" : r.getStatus().trim().toLowerCase();
+            if (!"reserved".equals(st)) {
+                return Result.failWithMsg("批量取消仅支持对【已预约】记录操作");
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        for (Reservation r : list) {
+            Reservation upd = new Reservation();
+            upd.setId(r.getId());
+            upd.setStatus("cancelled");
+            upd.setUpdateTime(now);
+            this.updateById(upd);
+        }
+
+        return Result.successWithMsg("批量取消成功：" + ids.size() + " 条");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result adminMarkViolation(Long reservationId) {
+        Reservation r = this.getById(reservationId);
+        if (r == null) return Result.failWithMsg("预约记录不存在");
+
+        String st = r.getStatus() == null ? "" : r.getStatus().trim().toLowerCase();
+        if (!"checked_in".equals(st)) {
+            return Result.failWithMsg("仅支持对【已签到】记录标记违规");
+        }
+
+        // 这里用 late 表示“已签到但被标记为违规”
+        LocalDateTime now = LocalDateTime.now();
+        r.setStatus("late");
+        r.setUpdateTime(now);
+        this.updateById(r);
+
+        // 复用统一违规入口（会防重复插入/重复扣分）
+        recordViolationIfAbsent(r);
+
+        return Result.successWithMsg("标记违规成功");
+    }
+
+    private List<Integer> findUserIdsByKeyword(String kw) {
+        if (!StringUtils.hasText(kw)) return Collections.emptyList();
+        List<User> users = userMapper.selectList(
+                Wrappers.<User>lambdaQuery()
+                        .like(User::getName, kw)
+                        .or()
+                        .like(User::getStudentNo, kw)
+        );
+        if (users == null || users.isEmpty()) return Collections.emptyList();
+        return users.stream().map(User::getId).filter(Objects::nonNull).distinct().toList();
+    }
+
+    private void applyAdminBaseFilters(LambdaQueryWrapper<Reservation> qw,
+                                       String kw,
+                                       Integer roomId,
+                                       LocalDate date,
+                                       List<Integer> userIds) {
+        if (roomId != null) qw.eq(Reservation::getRoomId, roomId);
+        if (date != null) qw.eq(Reservation::getDate, date);
+        if (StringUtils.hasText(kw)) {
+            List<Integer> ids = (userIds == null) ? Collections.emptyList() : userIds;
+            qw.and(q -> {
+                q.like(Reservation::getReservationNo, kw);
+                if (!ids.isEmpty()) {
+                    q.or().in(Reservation::getUserId, ids);
+                }
+            });
+        }
+    }
+
+    private AdminReservationStatsVO buildAdminStats(String keyword, Integer roomId, LocalDate date) {
+        String kw = keyword == null ? "" : keyword.trim();
+        List<Integer> userIds = findUserIdsByKeyword(kw);
+
+        LambdaQueryWrapper<Reservation> base = Wrappers.<Reservation>lambdaQuery();
+        applyAdminBaseFilters(base, kw, roomId, date, userIds);
+        long total = this.count(base);
+
+        LambdaQueryWrapper<Reservation> q1 = Wrappers.<Reservation>lambdaQuery();
+        applyAdminBaseFilters(q1, kw, roomId, date, userIds);
+        q1.eq(Reservation::getStatus, "reserved");
+        long reserved = this.count(q1);
+
+        LambdaQueryWrapper<Reservation> q2 = Wrappers.<Reservation>lambdaQuery();
+        applyAdminBaseFilters(q2, kw, roomId, date, userIds);
+        q2.eq(Reservation::getStatus, "checked_in");
+        long checkedIn = this.count(q2);
+
+        LambdaQueryWrapper<Reservation> q3 = Wrappers.<Reservation>lambdaQuery();
+        applyAdminBaseFilters(q3, kw, roomId, date, userIds);
+        q3.in(Reservation::getStatus, Arrays.asList("cancelled", "cancel_overdue"));
+        long cancelled = this.count(q3);
+
+        LambdaQueryWrapper<Reservation> q4 = Wrappers.<Reservation>lambdaQuery();
+        applyAdminBaseFilters(q4, kw, roomId, date, userIds);
+        q4.in(Reservation::getStatus, Arrays.asList("late", "no_show"));
+        long violation = this.count(q4);
+
+        AdminReservationStatsVO s = new AdminReservationStatsVO();
+        s.setTotal(total);
+        // AdminReservationStatsVO 字段为 booked/signed/canceled/violation
+        s.setBooked(reserved);
+        s.setSigned(checkedIn);
+        s.setCanceled(cancelled);
+        s.setViolation(violation);
+        return s;
+    }
+
+    private String statusRemark(String status) {
+        if (status == null) return "-";
+        String st = status.trim().toLowerCase();
+        return switch (st) {
+            case "reserved" -> "待签到";
+            case "checked_in" -> "已签到";
+            case "late" -> "迟到";
+            case "no_show" -> "未签到";
+            case "cancelled" -> "已取消";
+            case "cancel_overdue" -> "逾期取消";
+            default -> "-";
+        };
+    }
+
 }

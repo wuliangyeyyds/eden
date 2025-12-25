@@ -280,6 +280,13 @@ export default {
 
         const user = r.data || {}
 
+
+        // 黑名单用户：允许登录，但给出提示（预约接口会被后端拒绝）
+        const bl = Number(user.blacklistFlag ?? user.blacklist_flag ?? user.status ?? 0)
+        if (bl !== 0) {
+          this.toast('warning', '提示：你的账号当前处于黑名单/受限状态，可以正常登录，但无法进行预约操作。如需恢复请联系管理员。')
+        }
+
         const storage = this.loginForm.remember ? localStorage : sessionStorage
         const finalRoleId = (user.roleId !== undefined && user.roleId !== null) ? user.roleId : roleId
         storage.setItem('ssrmsUser', JSON.stringify({ ...user, roleId: finalRoleId }))

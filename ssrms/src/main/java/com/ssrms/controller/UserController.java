@@ -9,6 +9,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
+
 @RestController
 @RequestMapping("/user")
 public class UserController {
@@ -16,8 +19,25 @@ public class UserController {
     @Autowired
     private UserService userService;
 
+    private String getClientIp(HttpServletRequest request) {
+        String[] keys = new String[] {
+                "X-Forwarded-For",
+                "X-Real-IP",
+                "Proxy-Client-IP",
+                "WL-Proxy-Client-IP"
+        };
+        for (String k : keys) {
+            String v = request.getHeader(k);
+            if (v != null && v.length() > 0 && !"unknown".equalsIgnoreCase(v)) {
+                // X-Forwarded-For 可能是 "client, proxy1, proxy2"
+                return v.split(",")[0].trim();
+            }
+        }
+        return request.getRemoteAddr();
+    }
+
     @PostMapping("/login")
-    public Result login(@RequestBody LoginDTO dto) {
+    public Result login(@RequestBody LoginDTO dto, HttpServletRequest request) {
         if (dto.getAccount() == null || dto.getPassword() == null || dto.getRoleId() == null) {
             return Result.fail("账号、密码和登录身份不能为空");
         }
@@ -26,6 +46,21 @@ public class UserController {
         if (user == null) {
             return Result.fail("账号或密码错误，或账号状态异常");
         }
+
+        // 1) 获取客户端IP
+        String ip = getClientIp(request);
+        LocalDateTime now = LocalDateTime.now();
+
+        // 2) 写回数据库（只更新需要的字段）
+        User upd = new User();
+        upd.setId(user.getId());
+        upd.setLastLoginIp(ip);
+        upd.setLastLoginTime(now);
+        userService.updateById(upd);
+
+        // 3) 同步到返回对象（避免前端再查一次）
+        user.setLastLoginIp(ip);
+        user.setLastLoginTime(now);
 
         return Result.success(toVO(user));
     }
@@ -139,6 +174,8 @@ public class UserController {
         vo.setIsValid(u.getIsValid());
         vo.setCreateTime(u.getCreateTime());
         vo.setUpdateTime(u.getUpdateTime());
+        vo.setLastLoginIp(u.getLastLoginIp());
+        vo.setLastLoginTime(u.getLastLoginTime());
         return vo;
     }
 

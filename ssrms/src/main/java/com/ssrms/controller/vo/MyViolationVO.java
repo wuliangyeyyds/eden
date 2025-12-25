@@ -10,6 +10,9 @@ public class MyViolationVO {
 
     private Long reservationId;
 
+    /** 预约编号（reservation_no），用于页面显示 */
+    private String reservationNo;
+
     /** 校区/楼/自习室：前端违规表格需要 */
     private String campus;
     private String building;

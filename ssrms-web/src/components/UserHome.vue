@@ -86,38 +86,269 @@
           <div class="home-row">
             <div class="home-panel notice-panel">
               <div class="home-panel-header">
-                <div class="home-panel-title">公告 / 通知</div>
-                <button type="button" class="notice-more-btn">查看全部</button>
+                <div class="home-panel-title">
+                  公告 / 通知
+                  <span v-if="noticeTotalCount" class="notice-count">（{{ noticeTotalCount }}）</span>
+                </div>
+                <button type="button" class="notice-more-btn" @click="openNoticeAll">查看全部</button>
               </div>
 
-              <ul class="notice-list">
+              <div v-if="noticeLoading" class="notice-loading">正在加载公告…</div>
+
+              <div v-else-if="!homeNotices.length" class="notice-empty">
+                暂无公告
+              </div>
+
+              <ul v-else class="notice-list">
                 <li
                     v-for="item in homeNotices"
                     :key="item.id"
                     class="notice-item"
+                    @click="openNoticeDetail(item)"
                 >
-                  <div
-                      class="notice-tag"
-                      :class="'notice-level-' + item.level"
-                  >
-                    {{ item.levelText }}
+                  <div class="notice-badges">
+                    <div v-if="Number(item.isTop) === 1" class="notice-pill notice-top">
+                      <span class="notice-icon">📌</span>
+                      <span>置顶</span>
+                    </div>
+
+                    <div class="notice-pill notice-type" :class="'type-' + item.type">
+                      <span class="notice-icon">{{ noticeTypeIcon(item.type) }}</span>
+                      <span>{{ noticeTypeText(item.type) }}</span>
+                    </div>
+
+                    <div class="notice-pill notice-level" :class="'level-' + item.level">
+                      {{ noticeLevelText(item.level) }}
+                    </div>
                   </div>
+
                   <div class="notice-main">
-                    <div
-                        class="notice-title"
-                        :title="item.title"
-                    >
+                    <div class="notice-title" :title="item.title">
                       {{ item.title }}
                     </div>
-                    <div class="notice-meta">
-                      {{ item.date }} · {{ item.target }}
+
+                    <div v-if="item.summary" class="notice-snippet" :title="item.summary">
+                      {{ item.summary }}
                     </div>
+
+                    <div class="notice-meta">
+                      <span>{{ formatNoticeTime(item.publishTime) }}</span>
+                      <span class="notice-dot">·</span>
+                      <span>{{ item.targetText || '全体学生' }}</span>
+                      <span v-if="item.roomHint" class="notice-dot">·</span>
+                      <span v-if="item.roomHint">{{ item.roomHint }}</span>
+                    </div>
+                  </div>
+
+                  <div class="notice-right">
+                    <span v-if="isNoticeNew(item.id, item.publishTime)" class="notice-new">NEW</span>
+                    <span class="notice-arrow">›</span>
                   </div>
                 </li>
               </ul>
             </div>
           </div>
 
+
+
+
+          <!-- 公告列表弹窗：查看全部（弹窗） -->
+          <el-dialog
+              v-model="noticeAllVisible"
+              title="公告中心"
+              width="920px"
+              align-center
+              append-to-body
+              :z-index="4000"
+              :lock-scroll="false"
+              modal-class="notice-all-modal"
+              class="notice-all-dialog"
+          >
+            <!-- 列表视图 -->
+            <div>
+              <div class="notice-all-head">
+                <div class="notice-all-filter">
+                  <span class="filter-label">类型</span>
+
+                  <el-select
+                      v-model="noticeTypeFilter"
+                      size="small"
+                      placeholder="全部"
+                      clearable
+                      :teleported="false"
+                      class="notice-type-select"
+                      popper-class="notice-type-popper"
+                      style="width: 180px"
+                      @change="onNoticeTypeChange"
+                  >
+                    <el-option label="全部" value="">
+                      <span class="opt-row">
+                        <span class="opt-ico">🗂️</span>
+                        <span class="opt-text">全部</span>
+                      </span>
+                    </el-option>
+
+                    <el-option
+                        v-for="opt in noticeTypeOptions"
+                        :key="opt.value"
+                        :label="opt.label"
+                        :value="opt.value"
+                    >
+                      <span class="opt-row">
+                        <span class="opt-ico">{{ opt.icon }}</span>
+                        <span class="opt-text">{{ opt.label }}</span>
+                      </span>
+                    </el-option>
+                  </el-select>
+                </div>
+
+                <div class="notice-all-tip">
+                  共 {{ noticeTotalCount }} 条
+                </div>
+              </div>
+
+              <div v-if="noticeLoading" class="notice-loading">正在加载公告…</div>
+
+              <div v-else-if="!noticePageList.length" class="notice-empty">
+                暂无公告
+              </div>
+
+              <ul v-else class="notice-list notice-list-all">
+                <li
+                    v-for="item in noticePageList"
+                    :key="item.id"
+                    class="notice-item notice-item-click"
+                    @click="openNoticeDetailFromAll(item)"
+                >
+                  <div class="notice-badges">
+                    <div v-if="Number(item.isTop) === 1" class="notice-pill notice-top">
+                      <span class="notice-icon">📌</span>
+                      <span>置顶</span>
+                    </div>
+
+                    <div class="notice-pill notice-type" :class="'type-' + item.type">
+                      <span class="notice-icon">{{ noticeTypeIcon(item.type) }}</span>
+                      <span>{{ noticeTypeText(item.type) }}</span>
+                    </div>
+                    <div class="notice-pill notice-level" :class="'level-' + item.level">
+                      {{ noticeLevelText(item.level) }}
+                    </div>
+                  </div>
+
+                  <div class="notice-main">
+                    <div class="notice-title" :title="item.title">
+                      {{ item.title }}
+                    </div>
+
+                    <div v-if="item.summary" class="notice-snippet" :title="item.summary">
+                      {{ item.summary }}
+                    </div>
+
+                    <div class="notice-meta">
+                      <span>{{ formatNoticeTime(item.publishTime, true) }}</span>
+                      <span class="notice-dot">·</span>
+                      <span>{{ item.targetText || '全体学生' }}</span>
+                    </div>
+                  </div>
+
+                  <div class="notice-right">
+                    <span v-if="isNoticeNew(item.id)" class="notice-new">NEW</span>
+                    <span class="notice-arrow">›</span>
+                  </div>
+                </li>
+              </ul>
+
+              <div class="notice-pagination">
+                <el-pagination
+                    background
+                    layout="prev, pager, next"
+                    :page-size="noticePageSize"
+                    :current-page="noticePageNum"
+                    :total="noticeTotalCount"
+                    @current-change="onNoticePageChange"
+                />
+              </div>
+            </div>
+
+
+
+          </el-dialog>
+
+          <!-- 公告详情弹窗（小弹窗） -->
+          <el-dialog
+              v-model="noticeDetailVisible"
+              title="公告详情"
+              width="820px"
+              align-center
+              append-to-body
+              :z-index="4010"
+              :lock-scroll="false"
+              modal-class="notice-detail-modal"
+              class="notice-detail-dialog"
+          >
+            <div v-if="noticeDetail" class="notice-detail-body">
+              <div class="notice-detail-actions">
+                <el-button
+                    v-if="noticeDetailFrom === 'list'"
+                    type="primary"
+                    plain
+                    size="small"
+                    @click="backToNoticeAllList"
+                >返回公告列表</el-button>
+
+                <el-button
+                    v-else
+                    type="primary"
+                    plain
+                    size="small"
+                    @click="openNoticeAllFromDetail"
+                >查看全部公告</el-button>
+              </div>
+
+              <div class="notice-detail notice-detail-card">
+                <div class="nd-head">
+                  <div class="nd-title-row">
+                    <div class="nd-title">{{ noticeDetail.title }}</div>
+                    <span v-if="Number(noticeDetail.isTop) === 1" class="nd-top">置顶</span>
+                  </div>
+
+                  <div class="nd-tags">
+                    <span class="nd-tag" :class="'type-' + noticeDetail.type">
+                      {{ noticeTypeIcon(noticeDetail.type) }} {{ noticeTypeText(noticeDetail.type) }}
+                    </span>
+                    <span class="nd-tag" :class="'level-' + noticeDetail.level">
+                      {{ noticeLevelText(noticeDetail.level) }}
+                    </span>
+                  </div>
+                </div>
+
+                <el-divider></el-divider>
+
+                <div class="nd-info">
+                  <div class="nd-info-item">
+                    <div class="k">发布时间</div>
+                    <div class="v">{{ formatNoticeTime(noticeDetail.publishTime, true) }}</div>
+                  </div>
+                  <div class="nd-info-item">
+                    <div class="k">公告类型</div>
+                    <div class="v">{{ noticeTypeText(noticeDetail.type) }}</div>
+                  </div>
+                  <div class="nd-info-item">
+                    <div class="k">重要程度</div>
+                    <div class="v">{{ noticeLevelText(noticeDetail.level) }}</div>
+                  </div>
+                  <div class="nd-info-item">
+                    <div class="k">面向对象</div>
+                    <div class="v">{{ noticeDetail.targetText || '全体学生' }}</div>
+                  </div>
+                </div>
+
+                <el-divider></el-divider>
+
+                <div class="nd-content">{{ noticeDetail.content || '（无内容）' }}</div>
+              </div>
+            </div>
+          </el-dialog>
           <!-- 第四行：我的今日预约（整行） -->
           <div class="home-row">
             <div class="home-panel my-today-card">
@@ -152,7 +383,7 @@
                       </div>
                     </div>
 
-                    <span class="badge" :class="statusClass(item.status)">
+                    <span class="badge today-badge" :class="statusClass(item.status)">
               {{ renderStatusText(item.status) }}
             </span>
                   </div>
@@ -168,27 +399,6 @@
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- 右下角“随手一评”浮层 -->
-      <transition name="fade">
-        <div v-if="openFeedback" class="feedback-float">
-          <div class="feedback-panel">
-            <div class="feedback-title">今天的自习氛围如何？</div>
-            <div class="feedback-emojis">
-              <span @click="submitFB(1)">😣</span>
-              <span @click="submitFB(2)">😕</span>
-              <span @click="submitFB(3)">🙂</span>
-              <span @click="submitFB(4)">😊</span>
-              <span @click="submitFB(5)">🤩</span>
-            </div>
-          </div>
-        </div>
-      </transition>
-      <div class="feedback-float" v-if="!openFeedback">
-        <div class="feedback-btn" @click="openFeedback = true">
-          评价
         </div>
       </div>
     </div>
@@ -419,6 +629,12 @@
             </button>
           </div>
 
+
+          <p class="hint-text hint-warn" v-if="isUserBlacklisted">
+            你的账号当前处于黑名单/受限状态：可以正常登录与查看信息，但预约功能已被禁用（如需恢复请联系管理员）。
+          </p>
+
+
           <p class="hint-text">
             先点击“添加”将当前选择加入下方列表，最后点击“确认预约”提交，并跳转到“我的预约”。
           </p>
@@ -433,8 +649,12 @@
         <!-- 筛选条（在标题和表格之间） -->
         <div class="res-filter-row">
           <label class="res-filter">
-            <span class="res-filter-text">查看未签到记录</span>
-            <input class="res-filter-checkbox" type="checkbox" v-model="onlyNoShow" />
+            <span class="res-filter-text">仅查看违约记录</span>
+            <input class="res-filter-checkbox" type="checkbox" v-model="onlyViolation" />
+          </label>
+          <label class="res-filter">
+            <span class="res-filter-text">仅查看待签到记录</span>
+            <input class="res-filter-checkbox" type="checkbox" v-model="onlyPending" />
           </label>
         </div>
         <div class="table-wrapper">
@@ -542,53 +762,84 @@
 
     <!-- 违规记录 -->
     <div v-else-if="currentPage === 'user-violations'">
-      <div class="card">
+      <div class="card violation-record-card">
         <h2 class="page-title">违规记录与信用分</h2>
         <p class="page-subtitle">
           信用分从 100 开始，未签到、迟到等行为会扣分。
         </p>
 
-        <div class="credit-summary">
-          <div class="credit-score">
-            当前信用分：
-            <span class="score-number">{{ currentCreditScore }}</span>
+        <div class="credit-panel" :class="creditLevelClass">
+          <div class="credit-panel-left">
+            <div class="credit-ring" :class="creditLevelClass">
+              <div class="credit-ring-num">{{ currentCreditScore }}</div>
+              <div class="credit-ring-label">信用分</div>
+            </div>
           </div>
-          <p class="hint-text">
-            信用分低于 60 可能会被列入黑名单，一段时间内无法预约。
-          </p>
+
+          <div class="credit-panel-right">
+            <div class="credit-head">
+              <div class="credit-head-title">当前信用状态</div>
+              <span class="credit-level-pill" :class="creditLevelClass">{{ creditLevelText }}</span>
+            </div>
+
+            <div class="credit-sub">
+              信用分从 100 开始，迟到、未签到等行为会扣分。
+            </div>
+
+            <div class="credit-bar">
+              <div class="credit-bar-inner" :class="creditLevelClass" :style="creditBarStyle"></div>
+            </div>
+
+            <div class="credit-note" :class="creditLevelClass">
+              <span class="credit-note-strong">提示：</span>
+              <span>{{ creditRiskTip }}</span>
+            </div>
+          </div>
         </div>
 
         <div class="table-wrapper">
           <table class="table violation-table">
             <thead>
             <tr>
-              <th>日期</th>
-              <th>校区</th>
-              <th>建筑</th>
-              <th>自习室</th>
-              <th>座位号</th>
-              <th>违规类型</th>
-              <th>扣分</th>
-              <th>备注</th>
+              <th class="col-no">预约编号</th>
+              <th class="col-campus">校区</th>
+              <th class="col-building">建筑</th>
+              <th class="col-room">自习室</th>
+              <th class="col-date">日期</th>
+              <th class="col-time">时间段</th>
+              <th class="col-seat">座位号</th>
+              <th class="col-vtype">违约类型</th>
+              <th class="col-penalty">扣分</th>
+              <th class="col-remark">备注</th>
             </tr>
             </thead>
 
             <tbody>
             <tr v-if="!pagedViolations.length">
-              <td colspan="8" style="text-align: center; color: #999;">
+              <td colspan="10" style="text-align: center; color: #999;">
                 暂无违规记录
               </td>
             </tr>
 
-            <tr v-for="item in pagedViolations" :key="item.reservationId">
-              <td>{{ item.date }}</td>
-              <td>{{ item.campus || '-' }}</td>
-              <td>{{ item.building || '-' }}</td>
-              <td>{{ item.roomName || '-' }}</td>
-              <td>{{ item.seatNo || '-' }}</td>
-              <td>{{ item.violationType }}</td>
-              <td>{{ item.penaltyScore }}</td>
-              <td>{{ item.remark }}</td>
+            <tr v-for="item in pagedViolations" :key="(item.reservationNo || item.reservationId || item.id) + '-' + (item.violationType || '')">
+              <td class="col-no">{{ item.reservationNo || item.reservationId }}</td>
+              <td class="col-campus">{{ item.campus || '-' }}</td>
+              <td class="col-building">{{ item.building || '-' }}</td>
+              <td class="col-room">{{ item.roomName || '-' }}</td>
+              <td class="col-date">{{ item.date }}</td>
+              <td class="col-time">{{ formatTimeRange(item) || '-' }}</td>
+              <td class="col-seat">{{ item.seatNo || '-' }}</td>
+              <td class="col-vtype">
+                <span class="violation-tag" :class="violationTypeClass(item.violationType)">
+                  {{ item.violationType }}
+                </span>
+              </td>
+              <td class="col-penalty">
+                <span class="penalty-num">{{ item.penaltyScore }}</span>
+              </td>
+              <td class="col-remark">
+                <span class="remark-text" :title="item.remark">{{ item.remark }}</span>
+              </td>
             </tr>
             </tbody>
           </table>
@@ -628,35 +879,216 @@
     <!-- 评价与投诉 -->
     <div v-else-if="currentPage === 'user-feedback'">
       <div class="card">
-        <h2 class="page-title">评价与投诉</h2>
-        <p class="page-subtitle">
-          可以对自习环境、规则执行情况进行评价，也可以提交投诉信息（示意表单）。
-        </p>
-
-        <div class="feedback-grid">
-          <div class="feedback-column">
-            <h3 class="section-title">快速评价</h3>
-            <textarea
-                class="textarea"
-                rows="4"
-                placeholder="例如：环境安静、卫生良好、管理员服务态度不错等。"
-            ></textarea>
-            <button class="primary-btn">提交评价</button>
-          </div>
-          <div class="feedback-column">
-            <h3 class="section-title">投诉 / 建议</h3>
-            <textarea
-                class="textarea"
-                rows="4"
-                placeholder="请详细描述问题：发生时间、地点、涉及人员、具体情况等，以便管理员跟进处理。"
-            ></textarea>
-            <button class="primary-btn">提交投诉</button>
+        <div class="fb-head">
+          <div>
+            <h2 class="page-title">评价与反馈</h2>
+            <p class="page-subtitle">
+              你可以提交评价、建议、投诉或申诉。提交后会进入待处理队列，管理员处理后会在“我的反馈”中回复。
+            </p>
           </div>
         </div>
 
-        <p class="hint-text">
-          示例页面不会真正发送数据到后端，接入接口后，按钮可触发实际提交逻辑。
-        </p>
+        <el-tabs v-model="fbActiveTab" class="fb-tabs" @tab-click="onFbTabChange">
+          <el-tab-pane label="提交反馈" name="submit">
+            <div class="fb-submit-layout">
+              <div class="fb-form-card">
+                <el-form
+                    ref="feedbackFormRef"
+                    :model="feedbackForm"
+                    :rules="feedbackRules"
+                    label-width="92px"
+                >
+                  <el-form-item label="反馈类型" prop="category">
+                    <el-select
+                        v-model="feedbackForm.category"
+                        placeholder="请选择"
+                        filterable
+                        style="width: 260px"
+                        @change="onFeedbackCategoryChange"
+                        :teleported="true"
+                    >
+                      <el-option
+                          v-for="opt in fbCategoryOptions"
+                          :key="opt.value"
+                          :label="opt.label"
+                          :value="opt.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+
+                  <el-form-item label="关联预约">
+                    <el-select
+                        v-model="feedbackForm.reservationId"
+                        placeholder="可选：选择相关预约（更方便定位）"
+                        filterable
+                        clearable
+                        style="width: 520px"
+                        :teleported="true"
+                    >
+                      <el-option
+                          v-for="r in feedbackReservationOptions"
+                          :key="r.id"
+                          :label="fbReservationLabel(r)"
+                          :value="r.id"
+                      />
+                    </el-select>
+                  </el-form-item>
+
+                  <el-form-item v-if="fbNeedRating" label="满意度" prop="rating">
+                    <div class="fb-rate-row">
+                      <el-rate
+                          v-model="feedbackForm.rating"
+                          :max="5"
+                          allow-half
+                          show-score
+                      />
+                      <span class="fb-rate-hint">（1~5 分，可半星）</span>
+                    </div>
+                  </el-form-item>
+
+                  <el-form-item label="内容描述" prop="content">
+                    <el-input
+                        v-model="feedbackForm.content"
+                        type="textarea"
+                        :rows="6"
+                        maxlength="500"
+                        show-word-limit
+                        placeholder="请尽量描述清楚：时间、地点、问题现象/建议点、你希望的处理方式等。"
+                    />
+                  </el-form-item>
+
+                  <div class="fb-actions">
+                    <el-button
+                        type="primary"
+                        :loading="fbSubmitting"
+                        @click="submitFeedback"
+                    >提交</el-button>
+                    <el-button
+                        :disabled="fbSubmitting"
+                        @click="resetFeedbackForm"
+                    >清空</el-button>
+                  </div>
+                </el-form>
+              </div>
+
+              <div class="fb-tip-card">
+                <div class="fb-tip-title">填写小贴士</div>
+                <div class="fb-tip-sub">写得越具体，处理越快～</div>
+                <ul class="fb-tip-list">
+                  <li>投诉/申诉：建议包含时间、地点、涉及对象与现场情况。</li>
+                  <li>建议：说明你希望增加/优化的功能点，越具体越好。</li>
+                  <li>评价：可以对环境、卫生、秩序等打分并补充描述。</li>
+                  <li>提交后可在“我的反馈”查看处理进度与管理员回复。</li>
+                </ul>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="我的反馈" name="mine">
+            <div class="fb-mine-toolbar">
+              <div class="fb-mine-left">
+                <span class="fb-filter-label">状态</span>
+                <el-select
+                    v-model="fbStatusFilter"
+                    placeholder="全部"
+                    size="small"
+                    class="fb-filter"
+                    :teleported="true"
+                    @change="onFbFilterChange"
+                >
+                  <el-option label="全部" value="" />
+                  <el-option label="待处理" value="pending" />
+                  <el-option label="处理中" value="processing" />
+                  <el-option label="已处理" value="resolved" />
+                </el-select>
+              </div>
+
+              <div class="fb-mine-right">
+                <el-button size="small" @click="reloadMyFeedback">刷新</el-button>
+              </div>
+            </div>
+
+            <div v-loading="fbListLoading">
+              <div v-if="fbList.length" class="fb-list">
+                <div class="fb-item" v-for="item in fbList" :key="item.id">
+                  <div class="fb-item-main">
+                    <div class="fb-item-top">
+                      <div class="fb-item-tags">
+                        <span class="fb-tag fb-tag-type">{{ fbCategoryLabel(item.category) }}</span>
+                        <span class="fb-tag" :class="fbStatusClass(item.status)">{{ fbStatusLabel(item.status) }}</span>
+                        <span v-if="item.rating" class="fb-tag fb-tag-plain">评分 {{ item.rating }}/5</span>
+                        <span v-if="item.reservationId" class="fb-tag fb-tag-plain">关联预约 {{ item.reservationId }}</span>
+                      </div>
+                      <div class="fb-item-time">{{ formatFbTime(item.createTime) }}</div>
+                    </div>
+
+                    <div class="fb-item-preview">{{ fbPreview(item.content) }}</div>
+
+                    <div v-if="item.reply" class="fb-item-reply-preview">
+                      <span class="label">管理员回复：</span>
+                      <span class="txt">{{ fbPreview(item.reply, 120) }}</span>
+                    </div>
+                  </div>
+
+                  <div class="fb-item-actions">
+                    <el-button type="primary" link @click="openFeedbackDetail(item)">详情</el-button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="empty-state">
+                暂无反馈记录
+              </div>
+            </div>
+
+            <div class="pager" v-if="fbTotal > fbPageSize">
+              <el-pagination
+                  layout="prev, pager, next"
+                  :current-page="fbPageNum"
+                  :page-size="fbPageSize"
+                  :total="fbTotal"
+                  @current-change="onFbPageChange"
+              />
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+
+        <!-- 反馈详情 -->
+        <el-dialog
+            title="反馈详情"
+            v-model="fbDetailVisible"
+            width="720px"
+            align-center
+            append-to-body
+            :close-on-click-modal="false"
+        >
+          <div class="fb-detail">
+            <div class="fb-detail-title">
+              <span class="fb-tag fb-tag-type">{{ fbCategoryLabel(fbDetail.category) }}</span>
+              <span class="fb-tag" :class="fbStatusClass(fbDetail.status)">{{ fbStatusLabel(fbDetail.status) }}</span>
+              <span v-if="fbDetail.rating" class="fb-tag fb-tag-plain">评分 {{ fbDetail.rating }}/5</span>
+            </div>
+
+            <div class="fb-detail-meta">
+              <div>提交时间：{{ formatFbTime(fbDetail.createTime) }}</div>
+              <div v-if="fbDetail.reservationId">关联预约：{{ fbDetail.reservationId }}</div>
+            </div>
+
+            <div class="fb-detail-block">
+              <div class="t">内容</div>
+              <div class="c">{{ fbDetail.content || '-' }}</div>
+            </div>
+
+            <div class="fb-detail-block" v-if="fbDetail.reply">
+              <div class="t">管理员回复</div>
+              <div class="c">{{ fbDetail.reply }}</div>
+            </div>
+          </div>
+
+          <template #footer>
+            <el-button @click="fbDetailVisible=false">关闭</el-button>
+          </template>
+        </el-dialog>
       </div>
     </div>
 
@@ -812,12 +1244,18 @@
       </div>
     </div>
 
+    <AiAssistantLite :user-id="currentUserId" />
+
   </div>
 </template>
 
 <script>
+import { ElMessage } from 'element-plus'
+import AiAssistantLite from './AiAssistantLite.vue'
+
 export default {
   name: 'AppHome',
+  components: { AiAssistantLite },
   props: {
     currentPage: {
       type: String,
@@ -906,36 +1344,72 @@ export default {
       quoteTimer: null,
       openFeedback: false,
 
-      // 首页 - 公告列表示例数据
-      homeNotices: [
-        {
-          id: 1,
-          title: '【开放时间调整】本部图书馆 301 自习室本周末延长开放至 22:30',
-          date: '04-02',
-          level: 'important',
-          levelText: '重要',
-          target: '全体学生'
-        },
-        {
-          id: 2,
-          title: '【考试占用提醒】本周六下午 14:00–17:00 401 自习室用于四六级模拟考试',
-          date: '03-28',
-          level: 'info',
-          levelText: '提醒',
-          target: '英语考生'
-        },
-        {
-          id: 3,
-          title: '【设备维护】东校区 3 楼自习室 4 月 3 日 9:00–12:00 暂停开放',
-          date: '03-27',
-          level: 'warning',
-          levelText: '维护',
-          target: '东校区学生'
-        }
+      // 评价与反馈（写入 feedback 表，管理员后续可查看处理）
+      fbActiveTab: 'submit',
+      fbSubmitting: false,
+      fbCategoryOptions: [
+        { label: '环境评价', value: 'env' },
+        { label: '服务评价', value: 'service' },
+        { label: '建议 / 功能优化', value: 'suggestion' },
+        { label: '投诉', value: 'complaint' },
+        { label: '申诉（预约/违规等）', value: 'appeal' },
+        { label: '其他', value: 'other' }
+      ],
+      feedbackForm: {
+        category: 'env',
+        reservationId: '',
+        rating: 5,
+        content: ''
+      },
+      feedbackRules: {
+        category: [{ required: true, message: '请选择反馈类型', trigger: 'change' }],
+        rating: [{ required: true, message: '请给出评分', trigger: 'change' }],
+        content: [
+          { required: true, message: '请填写内容', trigger: 'blur' },
+          { min: 5, message: '内容至少 5 个字', trigger: 'blur' }
+        ]
+      },
+
+      fbStatusFilter: '',
+      fbList: [],
+      fbListLoading: false,
+      fbPageNum: 1,
+      fbPageSize: 6,
+      fbTotal: 0,
+
+      fbDetailVisible: false,
+      fbDetail: {},
+
+      // 首页 - 公告列表（从数据库加载）
+      homeNotices: [],
+      homeNoticeAllCache: [],
+
+      // 公告枚举（与 announcement 表字段含义保持一致）
+      noticeTypeOptions: [
+        { label: '规则', value: 'RULE', icon: '📌' },
+        { label: '调整', value: 'ADJUSTMENT', icon: '🕒' },
+        { label: '突发', value: 'EMERGENCY', icon: '🚨' },
+        { label: '维护', value: 'MAINTENANCE', icon: '🛠️' },
+        { label: '考试', value: 'EXAM', icon: '📝' },
+        { label: '其他', value: 'OTHER', icon: '📣' }
       ],
 
-      onlyNoShow: false,
+      noticeDetailVisible: false,
+      noticeDetail: null,
+      noticeAllVisible: false,
+      noticeAllView: 'list',
+      noticePageList: [],
+      noticeAllList: [],
+      noticeTotalCount: 0,
+      noticePageNum: 1,
+      noticePageSize: 6,
+      noticeTypeFilter: '',
+      noticeLoading: false,
 
+      homeNoticeLimit: 3,
+      noticeReadIds: [],
+      onlyViolation: false,
+      onlyPending: false,
       currentCreditScore: 100,
 
       todayOverview: {
@@ -983,6 +1457,14 @@ export default {
     currentDateStr () {
       const cur = this.dateList[this.currentDateIndex]
       return cur ? cur.fullLabel : null
+    },
+
+
+    // ✅ 黑名单/受限状态：允许登录，但禁止预约（前端禁用按钮 + 后端再兜底拦截）
+    isUserBlacklisted () {
+      const u = this.getStoredUser()
+      const v = Number(u?.blacklistFlag ?? u?.blacklist_flag ?? u?.status ?? 0)
+      return v !== 0
     },
 
     // 开始时间：08~22；结束时间：09~23（且必须 > startHour）
@@ -1063,11 +1545,12 @@ export default {
           && !!this.selectedSeatNo
           && !this.rangeHasConflict
           && !this.isDuplicateTempReservation
+          && !this.isUserBlacklisted
           && this.tempReservations.length < 4
     },
 
     canSubmitReservation () {
-      return this.tempReservations.length > 0 && !this.submittingReservations
+      return this.tempReservations.length > 0 && !this.submittingReservations && !this.isUserBlacklisted
     },
 
     totalPages () {
@@ -1137,11 +1620,14 @@ export default {
       }
 
       const norm = s => String(s ?? '').trim().toLowerCase()
+      const isPending = (x) => norm(x.status) === 'reserved'
+      const isViolation = (x) => ['late', 'no_show'].includes(norm(x.status))
 
-      if (this.onlyNoShow) {
-        return list
-            .filter(x => ['reserved', 'no_show'].includes(norm(x.status)))
-            .sort(byDateTimeAsc)
+      if (this.onlyViolation) {
+        return list.filter(isViolation).sort(byDateTimeAsc)
+      }
+      if (this.onlyPending) {
+        return list.filter(isPending).sort(byDateTimeAsc)
       }
 
       // ✅ 不勾选：待签到(reserved) 优先，其次已签到/迟到，再未签到，最后取消类
@@ -1170,6 +1656,45 @@ export default {
       return this.formatLastVisit(this.monthBrief.lastVisitTime)
     },
 
+
+    // 评价与反馈：只有“环境/服务”类需要打分
+    fbNeedRating () {
+      const c = (this.feedbackForm && this.feedbackForm.category) ? String(this.feedbackForm.category) : ''
+      return ['env', 'service'].includes(c)
+    },
+
+    // 关联预约下拉：取最近一些记录（避免下拉太长）
+    feedbackReservationOptions () {
+      const list = Array.isArray(this.myReservations) ? this.myReservations.slice() : []
+      const key = (x) => `${x.date || ''} ${String(x.startTime || '')}`
+      list.sort((a, b) => (key(a) < key(b) ? 1 : -1))
+      return list.slice(0, 50)
+    },
+    creditLevel () {
+      const s = Number(this.currentCreditScore || 0)
+      if (s >= 80) return 'good'
+      if (s >= 60) return 'warn'
+      return 'bad'
+    },
+    creditLevelText () {
+      if (this.creditLevel === 'good') return '良好'
+      if (this.creditLevel === 'warn') return '注意'
+      return '风险'
+    },
+    creditLevelClass () {
+      return `credit-${this.creditLevel}`
+    },
+    creditBarStyle () {
+      const s = Math.max(0, Math.min(100, Number(this.currentCreditScore || 0)))
+      return { width: `${s}%` }
+    },
+    creditRiskTip () {
+      const s = Number(this.currentCreditScore || 0)
+      if (s < 60) return '信用分低于 60 可能会被列入黑名单，一段时间内无法预约。'
+      if (s < 80) return '信用分低于 80 会被列入预警名单；建议保持按时签到，避免迟到或未签到。'
+      return '信用分低于 60 会被列入黑名单；继续保持按时签到。'
+    },
+
   },
 
   created () {
@@ -1180,6 +1705,7 @@ export default {
     const u0 = this.getStoredUser()
     if (u0) {
       this.currentUserId = u0.userId ?? u0.id ?? null
+      this.loadNoticeReadIds()
       this.profileForm = {
         name: u0.userName || u0.name || '',
         account: u0.accountNo || u0.account || '',
@@ -1204,6 +1730,7 @@ export default {
     this.loadWeather()
     this.loadQuoteFromDb()
     this.loadHomeDashboard()
+    this.loadHomeNotices()
   },
 
   methods: {
@@ -1533,6 +2060,11 @@ export default {
 
     async submitReservations () {
       if (!this.canSubmitReservation) return
+      if (this.isUserBlacklisted) {
+        alert('您已被加入黑名单，暂无法预约。如需恢复请联系管理员。')
+        return
+      }
+
       if (!this.ensureCurrentUserId()) {
         alert('请先登录后再预约')
         return
@@ -1648,6 +2180,14 @@ export default {
         'badge-cancel-overdue': status === 'cancel_overdue'
       }
     },
+
+    violationTypeClass (type) {
+      const t = (type || '').toString()
+      if (t.includes('未签到')) return 'vt-no-show'
+      if (t.includes('迟到')) return 'vt-late'
+      return 'vt-other'
+    },
+
 
     gotoPrevPage () {
       if (this.reservationPageIndex > 1) this.reservationPageIndex--
@@ -2026,6 +2566,470 @@ export default {
       }
     },
 
+
+    async loadHomeNotices () {
+      this.noticeLoading = true
+      try {
+        // ✅ 首页只展示 3 条，但为了实现“NEW 优先 + 时间倒序”的规则
+        // 这里需要先拉取更多数据作为候选池，再在前端统一排序后截取前 3 条展示
+        const res = await this.$axios.get('/announcement/home', {
+          params: { roleId: 1, limit: 50 }
+        })
+
+        const list = this.normalizeData(res) || []
+        const mapped = (list || []).map(x => ({
+          ...x,
+          summary: this.makeNoticeSummary(x.content),
+          roomHint: x.roomHint || ''
+        }))
+
+        const sorted = this.sortNotices(mapped)
+
+        // ✅ 缓存：读/未读变化后，可以从候选池里“补位”，保证首页永远优先展示 NEW
+        this.homeNoticeAllCache = sorted
+
+        this.homeNotices = sorted.slice(0, this.homeNoticeLimit || 3)
+
+        // ✅ 数量：至少用当前拉取到的数量；打开“公告中心”后会得到更准确的总数
+        this.noticeTotalCount = Math.max(Number(this.noticeTotalCount || 0), sorted.length)
+      } catch (e) {
+        console.error('loadHomeNotices failed:', e)
+        this.homeNotices = []
+        this.homeNoticeAllCache = []
+      } finally {
+        this.noticeLoading = false
+      }
+    },
+
+
+    async loadNoticePage () {
+      this.noticeLoading = true
+      try {
+        // ✅ 公告量不大：一次性拉取，前端做“NEW优先 + 时间倒序”全局排序后再分页展示
+        const res = await this.$axios.get('/announcement/page', {
+          params: {
+            roleId: 1,
+            pageNum: 1,
+            pageSize: 9999,
+            type: this.noticeTypeFilter || undefined
+          }
+        })
+
+        const body = this.normalizeBody(res)
+        let list = []
+        if (body && typeof body === 'object' && 'data' in body) {
+          list = body.data || []
+        } else {
+          list = this.normalizeData(res) || []
+        }
+
+        const mapped = (list || []).map(x => ({
+          ...x,
+          summary: this.makeNoticeSummary(x.content)
+        }))
+
+        this.noticeAllList = this.sortNotices(mapped)
+        this.noticeTotalCount = (this.noticeAllList || []).length
+
+        this.rebuildNoticePageList()
+      } catch (e) {
+        console.error('loadNoticePage failed:', e)
+        this.noticeAllList = []
+        this.noticePageList = []
+        this.noticeTotalCount = 0
+      } finally {
+        this.noticeLoading = false
+      }
+    },
+
+    openNoticeDetail (item) {
+      this.noticeDetail = item
+      this.noticeDetailFrom = 'home'
+      this.noticeDetailVisible = true
+
+      this.markNoticeRead(item && item.id)
+      this.afterNoticeRead()
+    },
+
+    openNoticeAll () {
+      this.noticeAllVisible = true
+      this.noticePageNum = 1
+      this.noticeDetail = null
+      this.loadNoticePage()
+    },
+
+    openNoticeDetailFromAll (item) {
+      this.noticeDetail = item
+      this.noticeDetailFrom = 'list'
+      this.noticeDetailVisible = true
+      this.noticeAllVisible = false
+
+      this.markNoticeRead(item && item.id)
+      this.afterNoticeRead()
+    },
+
+    backToNoticeAllList () {
+      this.noticeDetailVisible = false
+      this.noticeAllVisible = true
+      this.rebuildNoticePageList()
+    },
+
+    onNoticePageChange (page) {
+      this.noticePageNum = page
+      this.rebuildNoticePageList()
+    },
+
+    onNoticeTypeChange () {
+      this.noticePageNum = 1
+      this.loadNoticePage()
+    },
+
+
+    noticeTypeText (type) {
+      const map = {
+        RULE: '规则',
+        ADJUSTMENT: '调整',
+        EMERGENCY: '突发',
+        MAINTENANCE: '维护',
+        EXAM: '考试',
+        OTHER: '其他'
+      }
+      return map[type] || '其他'
+    },
+
+    noticeTypeIcon (type) {
+      const map = {
+        RULE: '📌',
+        ADJUSTMENT: '🕒',
+        EMERGENCY: '🚨',
+        MAINTENANCE: '🛠️',
+        EXAM: '📝',
+        OTHER: '📣'
+      }
+      return map[type] || '📣'
+    },
+
+    noticeLevelText (level) {
+      const map = {
+        IMPORTANT: '重要',
+        WARNING: '提醒',
+        INFO: '通知'
+      }
+      return map[level] || '通知'
+    },
+
+    makeNoticeSummary (content) {
+      if (!content) return ''
+      const s = String(content).replace(/\s+/g, ' ').trim()
+      if (!s) return ''
+      return s.length > 60 ? (s.slice(0, 60) + '…') : s
+    },
+
+    /* ---------------------------
+     * 评价与反馈（feedback）
+     * --------------------------- */
+    fbCategoryLabel (cat) {
+      const c = String(cat || '')
+      const hit = (this.fbCategoryOptions || []).find(x => x.value === c)
+      return hit ? hit.label : (c || '其他')
+    },
+    fbStatusLabel (st) {
+      const s = String(st || '')
+      const map = {
+        pending: '待处理',
+        processing: '处理中',
+        resolved: '已处理'
+      }
+      return map[s] || (s || '待处理')
+    },
+    fbStatusClass (st) {
+      const s = String(st || '')
+      if (s === 'resolved') return 'fb-tag-ok'
+      if (s === 'processing') return 'fb-tag-warn'
+      return 'fb-tag-pending'
+    },
+    fbPreview (txt, maxLen = 160) {
+      if (!txt) return ''
+      const s = String(txt).replace(/\s+/g, ' ').trim()
+      if (!s) return ''
+      return s.length > maxLen ? (s.slice(0, maxLen) + '…') : s
+    },
+    fbReservationLabel (r) {
+      if (!r) return ''
+      const room = r.roomLabel || r.roomName || `${r.campus || ''}${r.building ? ('·' + r.building) : ''}${r.roomName ? ('·' + r.roomName) : ''}`
+      const d = r.date || ''
+      const st = String(r.startTime || '').slice(0, 5)
+      const et = String(r.endTime || '').slice(0, 5)
+      const seat = r.seatNo ? ` · 座位 ${r.seatNo}` : ''
+      return `${d} ${st}-${et} · ${room}${seat}`
+    },
+    formatFbTime (dtStr) {
+      return this.formatNoticeTime(dtStr, true)
+    },
+
+    onFeedbackCategoryChange () {
+      // 非评价类不强制评分
+      if (!this.fbNeedRating) {
+        this.feedbackForm.rating = null
+        this.$nextTick(() => {
+
+          try {
+            const ref = this.$refs.feedbackFormRef
+            if (ref && ref.clearValidate) ref.clearValidate(['rating'])
+          } catch (e) {
+            // 忽略清理校验的异常
+          }
+
+        })
+      } else if (!this.feedbackForm.rating) {
+        this.feedbackForm.rating = 5
+      }
+    },
+
+    resetFeedbackForm () {
+      this.feedbackForm = {
+        category: 'env',
+        reservationId: '',
+        rating: 5,
+        content: ''
+      }
+      this.$nextTick(() => {
+
+        try {
+          const ref = this.$refs.feedbackFormRef
+          if (ref && ref.clearValidate) ref.clearValidate()
+        } catch (e) {
+          // 忽略清理校验的异常
+        }
+
+      })
+    },
+
+    async submitFeedback () {
+      const userId = this.ensureCurrentUserId()
+      if (!userId) {
+        ElMessage.error('未获取到用户信息，请重新登录')
+        return
+      }
+
+      // 先做表单校验
+      try {
+        if (this.fbNeedRating) {
+          await this.$refs.feedbackFormRef.validate()
+        } else {
+          await this.$refs.feedbackFormRef.validateField(['category', 'content'])
+        }
+      } catch (e) {
+        // validate 会抛错，直接结束
+        return
+      }
+
+      const payload = {
+        userId,
+        category: this.feedbackForm.category,
+        rating: this.fbNeedRating ? this.feedbackForm.rating : null,
+        content: this.feedbackForm.content,
+        reservationId: this.feedbackForm.reservationId ? Number(this.feedbackForm.reservationId) : null
+      }
+
+      this.fbSubmitting = true
+      try {
+        const res = await this.$axios.post('/feedback/submit', payload)
+        if (this.isBizOk(res)) {
+          ElMessage.success('提交成功，感谢你的反馈！')
+          this.resetFeedbackForm()
+          this.fbActiveTab = 'mine'
+          this.fbPageNum = 1
+          await this.reloadMyFeedback()
+        } else {
+          ElMessage.error(this.getMsg(res, '提交失败'))
+        }
+      } catch (err) {
+        console.error(err)
+        ElMessage.error('提交失败，请检查网络或稍后重试')
+      } finally {
+        this.fbSubmitting = false
+      }
+    },
+
+    onFbTabChange () {
+      if (this.fbActiveTab === 'mine') {
+        this.fbPageNum = 1
+        this.reloadMyFeedback()
+      }
+    },
+    onFbFilterChange () {
+      this.fbPageNum = 1
+      this.reloadMyFeedback()
+    },
+    onFbPageChange (p) {
+      this.fbPageNum = Number(p || 1)
+      this.reloadMyFeedback()
+    },
+    async reloadMyFeedback () {
+      const userId = this.ensureCurrentUserId()
+      if (!userId) return
+
+      this.fbListLoading = true
+      try {
+        const params = {
+          userId,
+          pageNum: this.fbPageNum,
+          pageSize: this.fbPageSize
+        }
+        if (this.fbStatusFilter) params.status = this.fbStatusFilter
+
+        const res = await this.$axios.get('/feedback/my-page', { params })
+        if (this.isBizOk(res)) {
+          const list = this.normalizeData(res)
+          this.fbList = Array.isArray(list) ? list : []
+          this.fbTotal = Number(res.total || 0)
+        } else {
+          this.fbList = []
+          this.fbTotal = 0
+        }
+      } catch (err) {
+        console.error(err)
+        this.fbList = []
+        this.fbTotal = 0
+      } finally {
+        this.fbListLoading = false
+      }
+    },
+
+    openFeedbackDetail (item) {
+      this.fbDetail = item ? { ...item } : {}
+      this.fbDetailVisible = true
+    },
+
+    formatNoticeTime (dtStr, withTime = false) {
+      if (!dtStr) return '-'
+      const parts = String(dtStr).replace('T', ' ').split(' ')
+      const [d, t] = parts.length >= 2 ? parts : [parts[0], '']
+      const ds = d.split('-')
+      if (ds.length >= 3) {
+        const mmdd = `${String(ds[1]).padStart(2, '0')}-${String(ds[2]).padStart(2, '0')}`
+        if (!withTime) return mmdd
+        if (!t) return mmdd
+        const hhmm = t.slice(0, 5)
+        return `${mmdd} ${hhmm}`
+      }
+      return String(dtStr)
+    },
+    noticeReadStorageKey () {
+      return `ssrms_notice_read_${this.currentUserId || 'guest'}`
+    },
+
+    loadNoticeReadIds () {
+      try {
+        const raw = localStorage.getItem(this.noticeReadStorageKey())
+        const arr = raw ? JSON.parse(raw) : []
+        this.noticeReadIds = Array.isArray(arr) ? arr.map(x => Number(x)).filter(x => !Number.isNaN(x)) : []
+      } catch (e) {
+        this.noticeReadIds = []
+      }
+    },
+
+    saveNoticeReadIds () {
+      try {
+        localStorage.setItem(this.noticeReadStorageKey(), JSON.stringify(this.noticeReadIds || []))
+      } catch (e) {
+        // ignore
+      }
+    },
+
+    isNoticeRead (id) {
+      if (id === null || id === undefined) return false
+      const nid = Number(id)
+      if (Number.isNaN(nid)) return false
+      return (this.noticeReadIds || []).includes(nid)
+    },
+
+    markNoticeRead (id) {
+      if (id === null || id === undefined) return
+      const nid = Number(id)
+      if (Number.isNaN(nid)) return
+      if (!this.isNoticeRead(nid)) {
+        this.noticeReadIds = [...(this.noticeReadIds || []), nid]
+        this.saveNoticeReadIds()
+      }
+    },
+
+    // NEW 规则：未读即 NEW（打开详情即会标记为已读并消失）
+    isNoticeNew (id) {
+      return !this.isNoticeRead(id)
+    },
+
+    noticeTimeValue (dtStr) {
+      if (!dtStr) return 0
+      const raw = String(dtStr).trim()
+      if (/^\d+$/.test(raw)) return Number(raw)
+
+      let s = raw
+      if (/^\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s)) {
+        const y = new Date().getFullYear()
+        s = `${y}-${s}`
+      }
+
+      const normalized = s.replace('T', ' ').replace(/-/g, '/')
+      const ms = Date.parse(normalized)
+      return Number.isNaN(ms) ? 0 : ms
+    },
+
+    sortNotices (list) {
+      const arr = Array.isArray(list) ? list.slice() : []
+      arr.sort((a, b) => {
+        const aTop = Number(a && a.isTop) === 1 ? 1 : 0
+        const bTop = Number(b && b.isTop) === 1 ? 1 : 0
+        if (aTop !== bTop) return bTop - aTop
+
+        const aNew = this.isNoticeNew(a && a.id) ? 1 : 0
+        const bNew = this.isNoticeNew(b && b.id) ? 1 : 0
+        if (aNew !== bNew) return bNew - aNew
+
+        const at = this.noticeTimeValue(a && a.publishTime)
+        const bt = this.noticeTimeValue(b && b.publishTime)
+        if (at !== bt) return bt - at
+
+        const aid = Number(a && a.id) || 0
+        const bid = Number(b && b.id) || 0
+        return bid - aid
+      })
+      return arr
+    },
+
+    rebuildNoticePageList () {
+      const all = Array.isArray(this.noticeAllList) ? this.noticeAllList : []
+      const size = Number(this.noticePageSize) || 6
+      const page = Number(this.noticePageNum) || 1
+      const start = (page - 1) * size
+      this.noticePageList = all.slice(start, start + size)
+    },
+
+
+    afterNoticeRead () {
+      // ✅ 首页：优先从“候选池”重新排序并截取前 3 条，保证 NEW 补位
+      if (Array.isArray(this.homeNoticeAllCache) && this.homeNoticeAllCache.length) {
+        this.homeNoticeAllCache = this.sortNotices(this.homeNoticeAllCache)
+        this.homeNotices = this.homeNoticeAllCache.slice(0, this.homeNoticeLimit || 3)
+      } else {
+        this.homeNotices = this.sortNotices(this.homeNotices).slice(0, this.homeNoticeLimit || 3)
+      }
+
+      // ✅ 公告中心：如果已加载过全部列表，也同步重排
+      if (Array.isArray(this.noticeAllList) && this.noticeAllList.length) {
+        this.noticeAllList = this.sortNotices(this.noticeAllList)
+        this.rebuildNoticePageList()
+      }
+    },
+
+
+    openNoticeAllFromDetail () {
+      this.noticeDetailVisible = false
+      this.openNoticeAll()
+    },
+
+
     formatLastVisit (dtStr) {
       if (!dtStr) return '-'
 
@@ -2058,6 +3062,7 @@ export default {
       handler (newVal) {
         if (newVal === 'home') {
           this.startQuoteTimer()
+          this.loadHomeNotices()
         } else {
           this.stopQuoteTimer()
         }
@@ -2066,14 +3071,20 @@ export default {
         if (newVal === 'user-reserve') this.initReserveRooms()
         if (newVal === 'user-violations') this.loadMyViolations()
         if (newVal === 'user-profile') this.loadUserProfile()
+        if (newVal === 'user-feedback') this.reloadMyFeedback()
       }
     },
     myReservations () {
       this.reservationPageIndex = 1
     },
-    onlyNoShow () {
+    onlyViolation (v) {
       this.reservationPageIndex = 1
+      if (v) this.onlyPending = false
     },
+    onlyPending (v) {
+      this.reservationPageIndex = 1
+      if (v) this.onlyViolation = false
+    }
   }
 }
 </script>
@@ -2137,6 +3148,15 @@ export default {
   color: #374151;
 }
 
+.violation-record-card .violation-table{
+  --vio-col-pad-x: 22px; /* ✅你就改这里：越大列间距越大 */
+}
+
+.violation-record-card .violation-table th,
+.violation-record-card .violation-table td{
+  padding: 10px var(--vio-col-pad-x);
+}
+
 .table tr:nth-child(even) td {
   background-color: #f9fafb;
 }
@@ -2167,54 +3187,254 @@ export default {
   color: #16a34a;
 }
 
-/* 评价与投诉 */
+/* 评价与反馈 */
 
-.feedback-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin-top: 10px;
-}
-
-.feedback-column {
+.fb-head {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
-.section-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 4px;
+.fb-tabs :deep(.el-tabs__header) {
+  margin-bottom: 14px;
 }
 
-.textarea {
-  border-radius: 10px;
-  border: 1px solid #d1d5db;
-  padding: 8px 10px;
-  resize: vertical;
+.fb-submit-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1080px) {
+  .fb-submit-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fb-form-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 18px 18px 16px;
+  background: #fff;
+}
+
+.fb-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-start;
+  padding-left: 92px;
+  margin-top: 6px;
+}
+
+.fb-rate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fb-rate-hint {
+  color: #6b7280;
   font-size: 13px;
 }
 
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  background-color: #e0e7ff;
-  color: #3730a3;
+.fb-tip-card {
+  border: 1px dashed rgba(99, 102, 241, 0.45);
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 12px;
+  padding: 16px;
 }
 
-.hint-text {
-  font-size: 12px;
+.fb-tip-title {
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.fb-tip-sub {
   color: #6b7280;
-  margin-top: 8px;
+  font-size: 13px;
+  margin-bottom: 10px;
 }
 
-.reserve-card {
+.fb-tip-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.fb-mine-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.fb-filter-label {
+  color: #6b7280;
+  font-size: 13px;
+  margin-right: 8px;
+}
+
+.fb-filter {
+  width: 140px;
+}
+
+.fb-list {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 10px;
+}
+
+.fb-item {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px 14px 12px;
+  background: #fff;
+}
+
+.fb-item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.fb-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.fb-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fb-item-time {
+  color: #9ca3af;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.fb-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.fb-tag-type {
+  background: rgba(59, 130, 246, 0.10);
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.fb-tag-plain {
+  background: #f8fafc;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+
+.fb-tag-pending {
+  background: rgba(245, 158, 11, 0.10);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.20);
+}
+
+.fb-tag-warn {
+  background: rgba(99, 102, 241, 0.10);
+  color: #4338ca;
+  border-color: rgba(99, 102, 241, 0.18);
+}
+
+.fb-tag-ok {
+  background: rgba(16, 185, 129, 0.10);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.18);
+}
+
+.fb-item-preview {
+  margin-top: 8px;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fb-item-reply-preview {
+  margin-top: 8px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.fb-item-reply-preview .label {
+  color: #6b7280;
+  margin-right: 6px;
+}
+
+.fb-item-actions {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.fb-detail-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.fb-detail-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.fb-detail-block {
+  border-top: 1px solid #eef2f7;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.fb-detail-block .t {
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.fb-detail-block .c {
+  white-space: pre-wrap;
+  color: #111827;
+  line-height: 1.75;
+}
+
+.empty-state {
+  padding: 26px 0;
+  text-align: center;
+  color: #9ca3af;
 }
 
 /* 顶部：标题 + 概要卡片 */
@@ -2627,6 +3847,19 @@ export default {
 .reserve-btn {
   padding: 8px 20px;
 }
+
+.hint-text {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.hint-text.hint-warn {
+  color: #dc2626;
+}
+
 
 .primary-btn {
   border: none;
@@ -3143,7 +4376,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 160px;
+  max-height: 320px;
   overflow-y: auto;
 }
 
@@ -3151,6 +4384,16 @@ export default {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+}
+
+.notice-item-click {
+  cursor: pointer;
+}
+
+.notice-center-detail-top {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 12px;
 }
 
 .notice-tag {
@@ -3178,6 +4421,252 @@ export default {
   color: #9ca3af;
   margin-top: 2px;
 }
+
+
+.notice-count {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.notice-loading {
+  font-size: 12px;
+  color: #6b7280;
+  padding: 10px 2px;
+}
+
+.notice-empty {
+  font-size: 12px;
+  color: #9ca3af;
+  padding: 10px 2px;
+}
+
+.notice-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.notice-item:hover {
+  background-color: #f9fafb;
+  border-color: #e5e7eb;
+  transform: translateY(-1px);
+}
+
+.notice-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 82px;
+}
+
+.notice-pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.notice-icon {
+  font-size: 12px;
+}
+
+.notice-top {
+  background: #111827;
+  color: #ffffff;
+}
+
+.notice-detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.notice-snippet {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice-dot {
+  margin: 0 6px;
+  color: #d1d5db;
+}
+
+.notice-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 6px;
+}
+
+.notice-new {
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fee2e2;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.notice-arrow {
+  color: #9ca3af;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* 类型配色 */
+.notice-type.type-RULE { background: #eff6ff; color: #1d4ed8; }
+.notice-type.type-ADJUSTMENT { background: #ecfeff; color: #0e7490; }
+.notice-type.type-EMERGENCY { background: #fff1f2; color: #be123c; }
+.notice-type.type-MAINTENANCE { background: #f5f3ff; color: #6d28d9; }
+.notice-type.type-EXAM { background: #f0fdf4; color: #15803d; }
+.notice-type.type-OTHER { background: #f3f4f6; color: #374151; }
+
+/* 级别配色 */
+.notice-level.level-IMPORTANT { background: #fef3c7; color: #92400e; }
+.notice-level.level-WARNING { background: #ffedd5; color: #9a3412; }
+.notice-level.level-INFO { background: #e0f2fe; color: #075985; }
+
+/* 弹窗：公告详情 */
+.notice-detail .nd-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 10px;
+}
+
+.notice-detail .nd-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notice-detail .nd-top {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #111827;
+  color: #ffffff;
+  flex: none;
+}
+
+.notice-detail .nd-info {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 6px 0 4px;
+}
+
+.notice-detail .nd-info-item .k {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.notice-detail .nd-info-item .v {
+  font-size: 13px;
+  color: #111827;
+  margin-top: 2px;
+}
+
+@media (max-width: 520px) {
+  .notice-detail .nd-info {
+    grid-template-columns: 1fr;
+  }
+}
+
+.notice-detail .nd-tags {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.notice-detail .nd-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.notice-detail .nd-tag.type-RULE { background: #eff6ff; color: #1d4ed8; }
+.notice-detail .nd-tag.type-ADJUSTMENT { background: #ecfeff; color: #0e7490; }
+.notice-detail .nd-tag.type-EMERGENCY { background: #fff1f2; color: #be123c; }
+.notice-detail .nd-tag.type-MAINTENANCE { background: #f5f3ff; color: #6d28d9; }
+.notice-detail .nd-tag.type-EXAM { background: #f0fdf4; color: #15803d; }
+.notice-detail .nd-tag.type-OTHER { background: #f3f4f6; color: #374151; }
+
+.notice-detail .nd-tag.level-IMPORTANT { background: #fef3c7; color: #92400e; }
+.notice-detail .nd-tag.level-WARNING { background: #ffedd5; color: #9a3412; }
+.notice-detail .nd-tag.level-INFO { background: #e0f2fe; color: #075985; }
+
+.notice-detail .nd-meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 14px;
+}
+
+.notice-detail .nd-content {
+  font-size: 14px;
+  color: #111827;
+  line-height: 1.7;
+  white-space: pre-line;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+/* 全部公告弹窗 */
+.notice-all-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.notice-all-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.notice-all-tip {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.notice-list-all {
+  max-height: 420px;
+}
+
+.notice-pagination {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 
 .home-panel-title {
   font-size: 15px;
@@ -3447,6 +4936,27 @@ export default {
   color: #3730a3;
 }
 
+.badge.today-badge{
+  background-color: transparent !important;
+}
+
+
+/* ✅ 我的预约：状态只用“文字颜色”提示，不要底色 */
+.my-res-table .badge{
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-weight: 600;
+}
+
+.my-res-table .badge.badge-pending{ color: #d97706; }        /* 待签到：偏黄 */
+.my-res-table .badge.badge-done{ color: #16a34a; }           /* 已签到：绿 */
+.my-res-table .badge.badge-late{ color: #dc2626; }           /* 迟到：红 */
+.my-res-table .badge.badge-missed{ color: #dc2626; }         /* 未签到：红 */
+.my-res-table .badge.badge-cancelled{ color: #6b7280; }      /* 已取消：灰 */
+.my-res-table .badge.badge-cancel-overdue{ color: #4f46e5; } /* 逾期取消：紫 */
+
 .home-panel-header{
   display:flex;
   align-items:center;
@@ -3492,6 +5002,8 @@ export default {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
   margin: 6px 0 10px;
 }
 
@@ -3511,5 +5023,268 @@ export default {
   cursor: pointer;
 }
 
-</style>
+/* 公告中心：筛选条更像“工具栏” */
+.notice-all-head{
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
 
+.notice-type-select :deep(.el-input__wrapper){
+  border-radius: 999px;
+  box-shadow: none;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.notice-type-select :deep(.el-input__wrapper.is-focus){
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 4px rgba(147, 197, 253, 0.35);
+}
+
+.notice-type-select :deep(.el-input__inner){
+  font-size: 12px;
+}
+
+/* 下拉面板里选项：图标 + 文本排版 */
+.opt-row{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.opt-ico{ font-size: 14px; }
+.opt-text{ font-size: 12px; }
+
+:deep(.notice-type-popper){
+  z-index: 5000 !important;
+}
+
+/* 下拉 popper（你给了 popper-class 才能定向美化） */
+:deep(.notice-type-popper .el-select-dropdown__item){
+  border-radius: 8px;
+  margin: 2px 6px;
+}
+:deep(.notice-type-popper .el-select-dropdown__item.selected){
+  font-weight: 600;
+}
+
+/* 公告中心列表：让 9 条在全屏里更舒服 */
+.notice-list-all{
+  max-height: calc(100vh - 260px);
+}
+
+
+
+
+/* 违规记录表格字体与"我的预约"一致 */
+.violation-record-card .table{
+  font-size: 14px;
+}
+.violation-record-card .table thead th{
+  font-size: 14px;
+}
+
+
+
+/* ===========================
+   违规记录页：信用分面板（更接近“我的预约”的风格）
+   =========================== */
+
+.credit-panel{
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f9fafb;
+  margin-top: 10px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 900px){
+  .credit-panel{
+    grid-template-columns: 1fr;
+  }
+}
+
+.credit-panel-left{
+  display: flex;
+  justify-content: center;
+}
+
+.credit-ring{
+  width: 116px;
+  height: 116px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.credit-ring-num{
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.credit-ring-label{
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.credit-panel-right{
+  min-width: 0;
+}
+
+.credit-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.credit-head-title{
+  font-weight: 800;
+  color: #111827;
+}
+
+.credit-level-pill{
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.credit-sub{
+  margin-top: 6px;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.credit-bar{
+  margin-top: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.credit-bar-inner{
+  height: 100%;
+  border-radius: 999px;
+  background: #9ca3af;
+}
+
+.credit-note{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(107, 114, 128, 0.35);
+  background: rgba(107, 114, 128, 0.06);
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.credit-note-strong{
+  font-weight: 800;
+}
+
+/* 分档颜色（只作用于文字/条，不给你整“血压飙升”的大红底） */
+.credit-good .credit-ring-num{ color: #16a34a; }
+.credit-warn .credit-ring-num{ color: #d97706; }
+.credit-bad  .credit-ring-num{ color: #dc2626; }
+
+.credit-good .credit-bar-inner{ background: #16a34a; }
+.credit-warn .credit-bar-inner{ background: #d97706; }
+.credit-bad  .credit-bar-inner{ background: #dc2626; }
+
+.credit-good .credit-level-pill{ border-color: rgba(22, 163, 74, 0.35); color: #16a34a; }
+.credit-warn .credit-level-pill{ border-color: rgba(217, 119, 6, 0.35); color: #d97706; }
+.credit-bad  .credit-level-pill{ border-color: rgba(220, 38, 38, 0.35); color: #dc2626; }
+
+.credit-good .credit-note{ border-color: rgba(22, 163, 74, 0.35); background: rgba(22, 163, 74, 0.06); }
+.credit-warn .credit-note{ border-color: rgba(217, 119, 6, 0.35); background: rgba(217, 119, 6, 0.06); }
+.credit-bad  .credit-note{ border-color: rgba(220, 38, 38, 0.35); background: rgba(220, 38, 38, 0.06); }
+
+/* ===========================
+   违规记录表：列宽、间距、标签
+   =========================== */
+
+.violation-table th.col-no,       .violation-table td.col-no{ width: 250px; padding-right: 4px; }
+.violation-table th.col-campus,   .violation-table td.col-campus{ width: 120px; padding-left: 4px; }
+.violation-table th.col-building, .violation-table td.col-building{ width: 120px; }
+.violation-table th.col-room,     .violation-table td.col-room{ width: 120px; }
+.violation-table th.col-date,     .violation-table td.col-date{ width: 150px; }
+.violation-table th.col-time,     .violation-table td.col-time{ width: 150px; }
+.violation-table th.col-seat,     .violation-table td.col-seat{ width: 120px; text-align: center; }
+.violation-table th.col-vtype,    .violation-table td.col-vtype{ width: 150px; text-align: center; }
+.violation-table th.col-penalty,  .violation-table td.col-penalty{ width: 120px; text-align: center; }
+.violation-table th.col-remark,   .violation-table td.col-remark{
+  min-width: 250px;
+  padding-right: 14px;
+  padding-left: 14px;
+}
+
+.violation-table td.col-no,
+.violation-table td.col-building,
+.violation-table td.col-remark{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.violation-tag{
+  font-weight: 800;
+}
+
+.violation-tag.vt-late{
+  color: #d97706;
+}
+
+.violation-tag.vt-no-show{
+  color: #dc2626;
+}
+
+.violation-tag.vt-other{
+  color: #374151;
+}
+
+.penalty-num{
+  font-weight: 800;
+  color: #dc2626;
+}
+
+.remark-text{
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 扣分 ↔ 备注：增加两列之间的“空隙感”（不影响其它列） */
+.violation-record-card .violation-table th.col-penalty,
+.violation-record-card .violation-table td.col-penalty{
+  padding-right: calc(var(--vio-col-pad-x) + 8px);
+}
+
+.violation-record-card .violation-table th.col-remark,
+.violation-record-card .violation-table td.col-remark{
+  padding-left: calc(var(--vio-col-pad-x) + 8px);
+  padding-right: calc(var(--vio-col-pad-x) + 10px);
+}
+
+</style>
