@@ -463,7 +463,6 @@ export default {
     useQuick (q) {
       if (this.sending) return
       this.inputText = q
-      this.$nextTick(() => this.send())
     },
     pushMsg (role, text) {
       const msg = {

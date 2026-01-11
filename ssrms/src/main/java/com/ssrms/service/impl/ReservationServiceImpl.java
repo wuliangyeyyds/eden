@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ssrms.common.Result;
 import com.ssrms.controller.dto.CreateSeatReservationDTO;
-import com.ssrms.controller.vo.*;
+import com.ssrms.controller.vo.MyViolationVO;
 import com.ssrms.entity.*;
 import com.ssrms.mapper.ReservationMapper;
 import com.ssrms.mapper.UserMapper;
@@ -26,6 +26,9 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ssrms.controller.vo.AdminReservationPageVO;
+import com.ssrms.controller.vo.AdminReservationRowVO;
+import com.ssrms.controller.vo.AdminReservationStatsVO;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -205,6 +208,7 @@ public class ReservationServiceImpl
         List<Violation> vList = violationMapper.selectList(
                 Wrappers.<Violation>lambdaQuery()
                         .eq(Violation::getUserId, userId)
+                        .eq(Violation::getHandled, 0)
                         .orderByDesc(Violation::getVDate)
                         .orderByDesc(Violation::getCreateTime)
         );
@@ -254,6 +258,7 @@ public class ReservationServiceImpl
 
             Reservation r = (rid == null) ? null : reservationMap.get(rid);
             if (r != null) {
+                vo.setReservationNo(r.getReservationNo());
                 vo.setStartTime(r.getStartTime());
                 vo.setEndTime(r.getEndTime());
                 Integer seatId = r.getSeatId();
@@ -333,15 +338,6 @@ public class ReservationServiceImpl
         v.setCreateTime(LocalDateTime.now());
         violationMapper.insert(v);
 
-        // ✅只在“插入成功”时扣分（防重复扣）
-        userMapper.update(
-                null,
-                Wrappers.<User>lambdaUpdate()
-                        .eq(User::getId, r.getUserId())
-                        .setSql("credit_score = GREATEST(0, credit_score - " + meta.penalty + ")")
-                        .set(User::getUpdateTime, LocalDateTime.now())
-        );
-
         return true;
     }
 
@@ -401,42 +397,6 @@ public class ReservationServiceImpl
             return Result.failWithMsg("时间段不合法");
         }
 
-        // ✅ 黑名单限制：允许登录，但禁止预约（避免“黑名单无法登录”体验）
-        // 兼容两种库字段：
-        // 1) 你当前代码/SQL里是 blacklist_flag（0-正常，非0-黑名单）
-        // 2) 你提到的 status=2 表示黑名单（如果你的库里确实有 status 字段）
-        Integer blacklist = null;
-        Integer status = null;
-        try {
-            // 用 map 读库字段，避免实体没有 status 字段时取不到值
-            com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<User> qw =
-                    new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<User>()
-                            .select("blacklist_flag", "status")
-                            .eq("id", dto.getUserId())
-                            .last("LIMIT 1");
-            List<Map<String, Object>> maps = userMapper.selectMaps(qw);
-            if (maps != null && !maps.isEmpty()) {
-                Map<String, Object> m = maps.get(0);
-                Object b = m.get("blacklist_flag");
-                Object s = m.get("status");
-                if (b != null) blacklist = Integer.valueOf(String.valueOf(b));
-                if (s != null) status = Integer.valueOf(String.valueOf(s));
-            } else {
-                return Result.failWithMsg("用户不存在");
-            }
-        } catch (Exception ignore) {
-            // 如果你的库里没有 status 字段，上面的 select 可能报错：那就退回到实体字段 blacklistFlag 判定
-            User u = userMapper.selectById(dto.getUserId());
-            if (u == null) return Result.failWithMsg("用户不存在");
-            blacklist = u.getBlacklistFlag();
-        }
-
-        boolean isBlacklisted = (blacklist != null && blacklist != 0) || (status != null && status == 2);
-        if (isBlacklisted) {
-            return Result.failWithMsg("您已被加入黑名单，暂无法预约。如需恢复请联系管理员。");
-        }
-
-
         if (dto.getSeatNos().size() > 4) {
             return Result.failWithMsg("一次最多预约 4 个座位");
         }
@@ -447,6 +407,17 @@ public class ReservationServiceImpl
                 .map(this::normalizeSeatNo)
                 .distinct()
                 .collect(Collectors.toList());
+
+        // ✅ 黑名单限制：0=正常，1=预警，2=黑名单（只有 2 才限制预约）
+        User u = userMapper.selectById(dto.getUserId());
+        if (u == null) return Result.failWithMsg("用户不存在");
+        Integer status = u.getBlacklistFlag();
+        if (status != null && status == 2) {
+            return Result.failWithMsg("你已被列入黑名单，无法预约，请联系管理员");
+        }
+        if (u.getIsValid() != null && "N".equalsIgnoreCase(u.getIsValid())) {
+            return Result.failWithMsg("账号已禁用");
+        }
 
         if (seatNos.size() != dto.getSeatNos().size()) {
             return Result.failWithMsg("座位号重复");
@@ -917,11 +888,6 @@ public class ReservationServiceImpl
             case "cancel_overdue" -> "逾期取消";
             default -> "-";
         };
-    }
-
-    @Override
-    public List<MyReservationVO> listMyReservations(Long userId, Boolean onlyPending, Boolean onlyViolation) {
-        return this.baseMapper.selectMyReservations(userId, onlyPending, onlyViolation);
     }
 
 }

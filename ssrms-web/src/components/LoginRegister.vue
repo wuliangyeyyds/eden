@@ -248,7 +248,7 @@ export default {
     },
 
     handleForgot () {
-      this.toast('info', '忘记密码功能暂未实现，请联系管理员重置密码')
+      this.toast('info', '请联系管理员重置密码')
     },
 
     handleShowAgreement () { this.showAgreement = true },
@@ -282,9 +282,10 @@ export default {
 
 
         // 黑名单用户：允许登录，但给出提示（预约接口会被后端拒绝）
-        const bl = Number(user.blacklistFlag ?? user.blacklist_flag ?? user.status ?? 0)
-        if (bl !== 0) {
-          this.toast('warning', '提示：你的账号当前处于黑名单/受限状态，可以正常登录，但无法进行预约操作。如需恢复请联系管理员。')
+        const status = Number(user.blacklistFlag ?? user.blacklist_flag ?? user.status ?? 0)
+        // 约定：0=正常，1=预警，2=黑名单。只有 2 才视为黑名单限制
+        if (status === 2) {
+          this.toast('warning', '提示：你的账号当前处于黑名单受限状态，可以正常登录，但无法进行预约操作。如需恢复请联系管理员。')
         }
 
         const storage = this.loginForm.remember ? localStorage : sessionStorage

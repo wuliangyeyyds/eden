@@ -1,15 +1,8 @@
-/* =========================================================
-   SSRMS 初始化数据库脚本（合并版：ssrms.sql + feedback.sql）
-   - 3校区 × 4楼宇 × 25房间 = 300 room
-   - 每房间 80 seat => 24000 seat
-   - 可反复执行：会 drop 旧表再重建
-   ========================================================= */
-
-CREATE DATABASE IF NOT EXISTS `ssrms-db`
+CREATE DATABASE IF NOT EXISTS `ssrms`
     DEFAULT CHARACTER SET utf8mb4
     COLLATE utf8mb4_general_ci;
 
-USE `ssrms-db`;
+USE `ssrms`;
 SET NAMES utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 0;
@@ -31,32 +24,31 @@ SET FOREIGN_KEY_CHECKS = 1;
    1) user
    ========================= */
 CREATE TABLE `user` (
-                        `id`             INT          NOT NULL AUTO_INCREMENT,
-                        `account`        VARCHAR(20)  NOT NULL COMMENT '账号（登录用）',
-                        `name`           VARCHAR(100) NOT NULL COMMENT '姓名',
-                        `student_no`     VARCHAR(50)  NULL COMMENT '学号',
-                        `password`       VARCHAR(100) NOT NULL COMMENT '密码（示例中为明文）',
-                        `age`            INT          NULL,
-                        `sex`            TINYINT(1)   NULL COMMENT '0 女 1 男',
-                        `phone`          VARCHAR(20)  NULL,
-                        `email`          VARCHAR(100) NULL COMMENT '邮箱',
-                        `role_id`        INT          NOT NULL DEFAULT 1 COMMENT '0 管理员 1 学生',
-                        `isValid`        VARCHAR(4)   NOT NULL DEFAULT 'Y' COMMENT 'Y 有效 N 无效',
+                        `id`              INT          NOT NULL AUTO_INCREMENT,
+                        `account`         VARCHAR(20)  NOT NULL COMMENT '账号（登录用）',
+                        `name`            VARCHAR(100) NOT NULL COMMENT '姓名',
+                        `student_no`      VARCHAR(50)  NULL COMMENT '学号',
+                        `password`        VARCHAR(100) NOT NULL COMMENT '密码（示例中为明文）',
+                        `age`             INT          NULL,
+                        `sex`             TINYINT(1)   NULL COMMENT '0 女 1 男',
+                        `phone`           VARCHAR(20)  NULL,
+                        `email`           VARCHAR(100) NULL COMMENT '邮箱',
+                        `role_id`         INT          NOT NULL DEFAULT 1 COMMENT '0 管理员 1 学生',
+                        `isValid`         VARCHAR(4)   NOT NULL DEFAULT 'Y' COMMENT 'Y 有效 N 无效',
 
-                        `college`        VARCHAR(100) NULL COMMENT '学院',
-                        `grade_class`    VARCHAR(100) NULL COMMENT '年级班级',
-                        `common_campus`  VARCHAR(50)  NULL COMMENT '常用校区',
-                        `profile_remark` VARCHAR(255) NULL COMMENT '个人中心备注信息',
+                        `college`         VARCHAR(100) NULL COMMENT '学院',
+                        `grade_class`     VARCHAR(100) NULL COMMENT '年级班级',
+                        `common_campus`   VARCHAR(50)  NULL COMMENT '常用校区',
+                        `profile_remark`  VARCHAR(255) NULL COMMENT '个人中心备注信息',
 
-                        `credit_score`   INT          NOT NULL DEFAULT 100 COMMENT '信用分，0-100',
-                        `blacklist_flag` TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否在黑名单 0-否 1-是',
-
+                        `credit_score`    INT          NOT NULL DEFAULT 100 COMMENT '信用分，0-100',
+                        `status`          TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '信用状态 0正常 1预警 2黑名单',
 
                         `last_login_ip`   VARCHAR(64)  NULL COMMENT '最近登录IP',
                         `last_login_time` DATETIME     NULL COMMENT '最近登录时间',
 
-                        `create_time`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        `update_time`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        `create_time`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        `update_time`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
                         PRIMARY KEY (`id`),
                         UNIQUE KEY `uk_user_account` (`account`)
@@ -170,21 +162,19 @@ CREATE TABLE `violation` (
 
 /* =========================
    6) feedback（评价与投诉 / 建议）
-   - category：env/service/suggestion/complaint/appeal/other
-   - status：pending/processing/resolved
    ========================= */
 CREATE TABLE `feedback` (
                             `id`              BIGINT       NOT NULL AUTO_INCREMENT,
-                            `user_id`         INT          NOT NULL COMMENT '用户ID',
-                            `room_id`         INT          NULL COMMENT '自习室ID（可选）',
-                            `reservation_id`  BIGINT       NULL COMMENT '预约ID（可选）',
-                            `category`        VARCHAR(30)  NOT NULL COMMENT 'env/service/suggestion/complaint/appeal/other',
-                            `rating`          INT          NULL COMMENT '评分 1~5（可选）',
-                            `content`         TEXT         NOT NULL COMMENT '反馈内容',
-                            `status`          VARCHAR(20)  NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/resolved',
-                            `reply`           TEXT         NULL COMMENT '管理员回复',
-                            `create_time`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                            `update_time`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                            `user_id`          INT          NOT NULL COMMENT '用户ID',
+                            `room_id`          INT          NULL COMMENT '自习室ID（可选）',
+                            `reservation_id`   BIGINT       NULL COMMENT '预约ID（可选）',
+                            `category`         VARCHAR(30)  NOT NULL COMMENT 'env/service/suggestion/complaint/appeal/other',
+                            `rating`           INT          NULL COMMENT '评分 1~5（可选）',
+                            `content`          TEXT         NOT NULL COMMENT '反馈内容',
+                            `status`           VARCHAR(20)  NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/resolved',
+                            `reply`            TEXT         NULL COMMENT '管理员回复',
+                            `create_time`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            `update_time`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
                             PRIMARY KEY (`id`),
                             KEY `idx_feedback_user` (`user_id`),
@@ -196,15 +186,8 @@ CREATE TABLE `feedback` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='评价与投诉表';
 
 
-
 /* =========================
-   7) notice（已弃用）
-   - 旧版本使用 notice 表存公告
-   - 当前版本统一使用 announcement 表，notice 已移除
-   ========================= */
-
-/* =========================
-   8) quote
+   7) quote
    ========================= */
 CREATE TABLE `quote` (
                          `id`          INT NOT NULL AUTO_INCREMENT,
@@ -216,31 +199,51 @@ CREATE TABLE `quote` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='首页提示/金句';
 
 
+/* =========================
+   8) announcement
+   ========================= */
+CREATE TABLE `announcement` (
+                                `id`           INT NOT NULL AUTO_INCREMENT,
+                                `title`        VARCHAR(200) NOT NULL COMMENT '公告标题',
+                                `content`      TEXT NOT NULL COMMENT '公告内容（支持多行文本）',
+                                `type`         VARCHAR(32) NOT NULL DEFAULT 'OTHER' COMMENT 'RULE/ADJUSTMENT/EMERGENCY/MAINTENANCE/EXAM/OTHER',
+                                `level`        VARCHAR(16) NOT NULL DEFAULT 'INFO' COMMENT 'IMPORTANT/WARNING/INFO',
+                                `target_role`  TINYINT NOT NULL DEFAULT 2 COMMENT '0管理员 1学生 2全部',
+                                `target_text`  VARCHAR(64) DEFAULT '全体学生' COMMENT '面向对象文案',
+                                `is_top`       TINYINT NOT NULL DEFAULT 0 COMMENT '是否置顶：0否 1是',
+                                `is_published` TINYINT NOT NULL DEFAULT 1 COMMENT '是否发布：0否 1是',
+                                `publish_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发布时间',
+                                `expire_time`  DATETIME NULL COMMENT '过期时间（可为空）',
+                                `created_by`   INT NULL COMMENT '创建人 user.id（可为空）',
+                                `create_time`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                `update_time`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                                PRIMARY KEY (`id`),
+                                KEY `idx_announcement_pub` (`is_published`, `publish_time`),
+                                KEY `idx_announcement_target` (`target_role`, `type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='公告表';
+
+
 /* =========================================================
    初始化数据
    ========================================================= */
 
-/* 1) 用户：1个管理员 + 多个学生 */
+/* 1) 用户：1个管理员 + 多个学生（status 默认 0） */
 INSERT INTO `user`
 (`account`,`name`,`student_no`,`password`,`age`,`sex`,`phone`,`email`,
  `role_id`,`isValid`,`college`,`grade_class`,`common_campus`,`profile_remark`,
- `credit_score`,`blacklist_flag`)
+ `credit_score`,`status`)
 VALUES
     ('eden','超级管理员',NULL,'123456',20,1,'15869052922',NULL,0,'Y','信息工程学院','计科一班','本部校区','管理员账号',100,0),
 
     ('xiaoming','小明','236002922','123456',18,1,'13456789222','xiaoming@demo.com',1,'Y','法学院','计科一班','本部校区','',100,0),
     ('caixy','蔡徐','236002937','123456',18,1,'13456789001','caixy@demo.com',1,'Y','信息工程学院','计科一班','本部校区','',100,0),
     ('kunkun','坤坤','236002938','123456',18,1,'13456789002','kunkun@demo.com',1,'Y','信息工程学院','计科一班','本部校区','',100,0),
-    ('yuechenxi','月之晨曦','236002939','123456',19,0,'13456789003','yuechenxi@demo.com',1,'Y','信息工程学院','计科一班','本部校区','喜欢安静靠窗位',100,0),
+    ('yuezhichenxi','月之晨曦','236002939','123456',19,0,'13456789003','yuechenxi@demo.com',1,'Y','信息工程学院','计科一班','本部校区','喜欢安静靠窗位',100,0),
     ('sleepy','sleepy','236002999','123456',18,1,'13456789004','sleepy@demo.com',1,'Y','信息工程学院','计科二班','东校区','午后容易犯困',100,0),
-    ('liuyi','liuyi','236000000','123456',18,1,'13456789005','liuyi@demo.com',1,'Y','信息工程学院','计科二班','梅山校区','',100,0),
-
-    ('alice','Alice','236003001','123456',18,0,'13456789006','alice@demo.com',1,'Y','外国语学院','英专二班','东校区','',100,0),
-    ('bob','Bob','236003002','123456',19,1,'13456789007','bob@demo.com',1,'Y','管理学院','信管一班','本部校区','',100,0),
-    ('charlie','Charlie','236003003','123456',20,1,'13456789008','charlie@demo.com',1,'Y','信息工程学院','软工一班','梅山校区','',100,0);
+    ('liuyi','liuyi','236000000','123456',18,1,'13456789005','liuyi@demo.com',1,'Y','信息工程学院','计科二班','梅山校区','',100,0);
 
 
-/* 2) quote（你后续想多加再追加 insert 就行） */
+/* 2) quote */
 INSERT INTO `quote` (`content`,`author`,`enabled`,`create_time`) VALUES
                                                                      ('代码写完要多测试，bug 总会在你最不想看到它的时候出现。', NULL, 1, NOW()),
                                                                      ('专注一小时，胜过边刷手机边学习三小时。', NULL, 1, NOW()),
@@ -392,95 +395,79 @@ SELECT COUNT(*) AS room_cnt FROM room;
 SELECT COUNT(*) AS seat_cnt FROM seat;
 
 
-
-CREATE TABLE `announcement` (
-                                `id` INT NOT NULL AUTO_INCREMENT,
-                                `title` VARCHAR(200) NOT NULL COMMENT '公告标题',
-                                `content` TEXT NOT NULL COMMENT '公告内容（支持多行文本）',
-                                `type` VARCHAR(32) NOT NULL DEFAULT 'OTHER' COMMENT 'RULE/ADJUSTMENT/EMERGENCY/MAINTENANCE/EXAM/OTHER',
-                                `level` VARCHAR(16) NOT NULL DEFAULT 'INFO' COMMENT 'IMPORTANT/WARNING/INFO',
-                                `target_role` TINYINT NOT NULL DEFAULT 2 COMMENT '0管理员 1学生 2全部',
-                                `target_text` VARCHAR(64) DEFAULT '全体学生' COMMENT '面向对象文案',
-                                `is_top` TINYINT NOT NULL DEFAULT 0 COMMENT '是否置顶：0否 1是',
-                                `is_published` TINYINT NOT NULL DEFAULT 1 COMMENT '是否发布：0否 1是',
-                                `publish_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发布时间',
-                                `expire_time` DATETIME NULL COMMENT '过期时间（可为空）',
-                                `created_by` INT NULL COMMENT '创建人 user.id（可为空）',
-                                `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                                `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                                PRIMARY KEY (`id`),
-                                KEY `idx_announcement_pub` (`is_published`, `publish_time`),
-                                KEY `idx_announcement_target` (`target_role`, `type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- =========================
--- 示例数据（你可以删掉）
--- =========================
+/* 6) announcement（两段 insert 合并为一次） */
 INSERT INTO `announcement`
-(`title`, `content`, `type`, `level`, `target_role`, `target_text`, `is_top`, `is_published`, `publish_time`)
+(`title`, `content`, `type`, `level`, `target_role`, `target_text`,
+ `is_top`, `is_published`, `publish_time`, `expire_time`, `created_by`)
 VALUES
     ('【开放时间调整】本部图书馆 301 自习室本周末延长开放至 22:30',
-     '本周末（周六、周日）本部图书馆 301 自习室开放时间延长至 22:30。
-    请同学们合理安排学习时间，离开时带走个人物品并保持安静。',
-     'ADJUSTMENT', 'IMPORTANT', 1, '全体学生', 1, 1, NOW()),
+     '本周末（周六、周日）本部图书馆 301 自习室开放时间延长至 22:30。\n请同学们合理安排学习时间，离开时带走个人物品并保持安静。',
+     'ADJUSTMENT', 'IMPORTANT', 1, '全体学生', 1, 1, NOW(), NULL, NULL),
+
     ('【规则】预约后请按时签到，累计多次将影响信用分',
-     '请在预约开始后 15 分钟内完成签到；超过 15 分钟视为迟到。
-    如连续出现未签到/迟到等情况，系统将记录违规并扣减信用分。',
-     'RULE', 'INFO', 1, '全体学生', 0, 1, NOW()),
+     '请在预约开始后 15 分钟内完成签到；超过 15 分钟视为迟到。\n如连续出现未签到/迟到等情况，系统将记录违规并扣减信用分。',
+     'RULE', 'INFO', 1, '全体学生', 0, 1, NOW(), NULL, NULL),
+
     ('【设备维护】东校区 3 楼自习室 4 月 3 日 9:00–12:00 暂停开放',
-     '因设备维护，东校区 3 楼自习室将于 4 月 3 日 9:00–12:00 暂停开放。
-    给您带来不便，敬请谅解。',
-     'MAINTENANCE', 'WARNING', 1, '东校区学生', 0, 1, NOW());
+     '因设备维护，东校区 3 楼自习室将于 4 月 3 日 9:00–12:00 暂停开放。\n给您带来不便，敬请谅解。',
+     'MAINTENANCE', 'WARNING', 1, '东校区学生', 0, 1, NOW(), NULL, NULL),
 
-INSERT INTO `announcement`
-(`title`, `content`, `type`, `level`, `target_role`, `target_text`, `is_top`, `is_published`, `publish_time`, `expire_time`)
-VALUES
-    ('【规则】预约开始后 15 分钟内需签到，否则计为迟到', '请在预约开始后 15 分钟内完成签到。
-超过 15 分钟未签到将计为迟到；超过 30 分钟未签到将自动取消并记一次未签到。
-请合理安排到达时间，避免影响信用分。', 'RULE', 'INFO', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 1 DAY), NULL),
-    ('【规则】同一账号每日最多可预约 2 次', '为保障座位资源公平使用，同一账号每日最多可创建 2 次预约。
-如确需长时段学习，请优先选择连续时段或在到期后续约。', 'RULE', 'INFO', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 2 DAY), NULL),
-    ('【调整】期末周部分自习室提前开放', '期末周（12/23—1/05）部分自习室将提前至 07:30 开放。
-具体房间与开放安排以“自习室开放情况”页面为准。', 'ADJUSTMENT', 'IMPORTANT', 2, '全体学生', 1, 1, DATE_SUB(NOW(), INTERVAL 3 DAY), DATE_ADD(NOW(), INTERVAL 20 DAY)),
-    ('【考试】四级模拟考试占用提示（图书馆 401）', '本周六 14:00—17:00 图书馆 401 将用于四级模拟考试。
-该时段该房间将暂停对外预约。', 'EXAM', 'WARNING', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 4 DAY), DATE_ADD(NOW(), INTERVAL 3 DAY)),
-    ('【维护】空调检修：本部图书馆 2F', '因空调检修，本部图书馆二楼部分区域将出现短时噪音。
-预计 09:00—11:00 完成，给您带来不便敬请谅解。', 'MAINTENANCE', 'INFO', 1, '本部学生', 0, 1, DATE_SUB(NOW(), INTERVAL 5 DAY), NULL),
-    ('【突发】网络波动：在线签到可能延迟', '受网络波动影响，签到/签退状态可能出现 1—2 分钟延迟。
-如遇到显示异常，请稍后刷新页面或重新进入。', 'EMERGENCY', 'WARNING', 2, '全体用户', 1, 1, DATE_SUB(NOW(), INTERVAL 6 DAY), DATE_ADD(NOW(), INTERVAL 1 DAY)),
-    ('【规则】请勿占座：离开超过 30 分钟将被记录', '为维护公平使用，离座超过 30 分钟且未保持有效签到状态，系统可能记录一次占座违规。
-如需短时离开，请尽快返回并保持安静。', 'RULE', 'WARNING', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 7 DAY), NULL),
-    ('【调整】新增“安静区/讨论区”分区标识', '为提升学习体验，部分自习室新增“安静区/讨论区”分区标识。
-请同学们按区域规则使用座位，避免影响他人。', 'ADJUSTMENT', 'INFO', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 8 DAY), NULL),
-    ('【其他】失物招领：图书馆 301 发现耳机', '图书馆 301 自习室发现一副黑色耳机。
-请失主携带学生证前往服务台认领。', 'OTHER', 'INFO', 2, '全体用户', 0, 1, DATE_SUB(NOW(), INTERVAL 9 DAY), DATE_ADD(NOW(), INTERVAL 5 DAY)),
-    ('【维护】座椅更换：东校区 3 楼 302', '东校区 3 楼 302 自习室将进行座椅更换。
-施工期间该房间部分座位暂不可预约。', 'MAINTENANCE', 'WARNING', 1, '东校区学生', 0, 1, DATE_SUB(NOW(), INTERVAL 10 DAY), DATE_ADD(NOW(), INTERVAL 2 DAY)),
-    ('【规则】请保持环境整洁，离开带走垃圾', '请自觉保持自习室整洁，不在桌面粘贴小广告、张贴便签。
-离开时请带走垃圾并归位椅子。', 'RULE', 'INFO', 2, '全体用户', 0, 1, DATE_SUB(NOW(), INTERVAL 11 DAY), NULL),
-    ('【调整】部分房间照明升级，晚间亮度提升', '本周完成部分自习室照明升级，晚间亮度将有所提升。
-如有灯光异常请通过“评价与投诉”反馈。', 'ADJUSTMENT', 'INFO', 2, '全体用户', 0, 1, DATE_SUB(NOW(), INTERVAL 12 DAY), NULL),
-    ('【考试】研究生复试自习区临时安排', '研究生复试期间，部分房间将作为候考与安静复习区。
-具体安排以当日公告为准。', 'EXAM', 'IMPORTANT', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 13 DAY), DATE_ADD(NOW(), INTERVAL 10 DAY)),
-    ('【突发】临时停电演练：15:00—15:10', '今日 15:00—15:10 将进行临时停电演练。
-演练期间系统可能无法提交签到/签退，请提前安排。', 'EMERGENCY', 'IMPORTANT', 2, '全体用户', 1, 1, DATE_SUB(NOW(), INTERVAL 0 DAY), DATE_ADD(NOW(), INTERVAL 1 DAY)),
-    ('【其他】欢迎使用“座位偏好”设置', '你可以在“个人中心”设置常用校区、自习偏好等。
-系统将优先推荐符合偏好的房间与座位。', 'OTHER', 'INFO', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 14 DAY), NULL);
+    ('【规则】预约开始后 15 分钟内需签到，否则计为迟到',
+     '请在预约开始后 15 分钟内完成签到。\n超过 15 分钟未签到将计为迟到；超过 30 分钟未签到将自动取消并记一次未签到。\n请合理安排到达时间，避免影响信用分。',
+     'RULE', 'INFO', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 1 DAY), NULL, NULL),
 
--- 1) 新增 status 字段（若已存在请跳过本步）
-ALTER TABLE `user`
-  ADD COLUMN `status` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '信用状态 0正常 1预警 2黑名单' AFTER `credit_score`;
+    ('【规则】同一账号每日最多可预约 2 次',
+     '为保障座位资源公平使用，同一账号每日最多可创建 2 次预约。\n如确需长时段学习，请优先选择连续时段或在到期后续约。',
+     'RULE', 'INFO', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 2 DAY), NULL, NULL),
 
--- 2) 旧黑名单迁移（黑名单优先）
-UPDATE `user`
-SET `status` = 2
-WHERE `blacklist_flag` = 1;
+    ('【调整】期末周部分自习室提前开放',
+     '期末周（12/23—1/05）部分自习室将提前至 07:30 开放。\n具体房间与开放安排以“自习室开放情况”页面为准。',
+     'ADJUSTMENT', 'IMPORTANT', 2, '全体学生', 1, 1, DATE_SUB(NOW(), INTERVAL 3 DAY), DATE_ADD(NOW(), INTERVAL 20 DAY), NULL),
 
--- 3) 非黑名单用户：按信用分自动迁移为预警/正常
-UPDATE `user`
-SET `status` = CASE WHEN `credit_score` < 80 THEN 1 ELSE 0 END
-WHERE (`blacklist_flag` IS NULL OR `blacklist_flag` = 0);
+    ('【考试】四级模拟考试占用提示（图书馆 401）',
+     '本周六 14:00—17:00 图书馆 401 将用于四级模拟考试。\n该时段该房间将暂停对外预约。',
+     'EXAM', 'WARNING', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 4 DAY), DATE_ADD(NOW(), INTERVAL 3 DAY), NULL),
 
--- 4) 删除旧字段 blacklist_flag（若你的 MySQL 版本不支持 IF EXISTS，请手动确认后执行）
-ALTER TABLE `user`
-  DROP COLUMN `blacklist_flag`;
+    ('【维护】空调检修：本部图书馆 2F',
+     '因空调检修，本部图书馆二楼部分区域将出现短时噪音。\n预计 09:00—11:00 完成，给您带来不便敬请谅解。',
+     'MAINTENANCE', 'INFO', 1, '本部学生', 0, 1, DATE_SUB(NOW(), INTERVAL 5 DAY), NULL, NULL),
+
+    ('【突发】网络波动：在线签到可能延迟',
+     '受网络波动影响，签到/签退状态可能出现 1—2 分钟延迟。\n如遇到显示异常，请稍后刷新页面或重新进入。',
+     'EMERGENCY', 'WARNING', 2, '全体用户', 1, 1, DATE_SUB(NOW(), INTERVAL 6 DAY), DATE_ADD(NOW(), INTERVAL 1 DAY), NULL),
+
+    ('【规则】请勿占座：离开超过 30 分钟将被记录',
+     '为维护公平使用，离座超过 30 分钟且未保持有效签到状态，系统可能记录一次占座违规。\n如需短时离开，请尽快返回并保持安静。',
+     'RULE', 'WARNING', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 7 DAY), NULL, NULL),
+
+    ('【调整】新增“安静区/讨论区”分区标识',
+     '为提升学习体验，部分自习室新增“安静区/讨论区”分区标识。\n请同学们按区域规则使用座位，避免影响他人。',
+     'ADJUSTMENT', 'INFO', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 8 DAY), NULL, NULL),
+
+    ('【其他】失物招领：图书馆 301 发现耳机',
+     '图书馆 301 自习室发现一副黑色耳机。\n请失主携带学生证前往服务台认领。',
+     'OTHER', 'INFO', 2, '全体用户', 0, 1, DATE_SUB(NOW(), INTERVAL 9 DAY), DATE_ADD(NOW(), INTERVAL 5 DAY), NULL),
+
+    ('【维护】座椅更换：东校区 3 楼 302',
+     '东校区 3 楼 302 自习室将进行座椅更换。\n施工期间该房间部分座位暂不可预约。',
+     'MAINTENANCE', 'WARNING', 1, '东校区学生', 0, 1, DATE_SUB(NOW(), INTERVAL 10 DAY), DATE_ADD(NOW(), INTERVAL 2 DAY), NULL),
+
+    ('【规则】请保持环境整洁，离开带走垃圾',
+     '请自觉保持自习室整洁，不在桌面粘贴小广告、张贴便签。\n离开时请带走垃圾并归位椅子。',
+     'RULE', 'INFO', 2, '全体用户', 0, 1, DATE_SUB(NOW(), INTERVAL 11 DAY), NULL, NULL),
+
+    ('【调整】部分房间照明升级，晚间亮度提升',
+     '本周完成部分自习室照明升级，晚间亮度将有所提升。\n如有灯光异常请通过“评价与投诉”反馈。',
+     'ADJUSTMENT', 'INFO', 2, '全体用户', 0, 1, DATE_SUB(NOW(), INTERVAL 12 DAY), NULL, NULL),
+
+    ('【考试】研究生复试自习区临时安排',
+     '研究生复试期间，部分房间将作为候考与安静复习区。\n具体安排以当日公告为准。',
+     'EXAM', 'IMPORTANT', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 13 DAY), DATE_ADD(NOW(), INTERVAL 10 DAY), NULL),
+
+    ('【突发】临时停电演练：15:00—15:10',
+     '今日 15:00—15:10 将进行临时停电演练。\n演练期间系统可能无法提交签到/签退，请提前安排。',
+     'EMERGENCY', 'IMPORTANT', 2, '全体用户', 1, 1, DATE_SUB(NOW(), INTERVAL 0 DAY), DATE_ADD(NOW(), INTERVAL 1 DAY), NULL),
+
+    ('【其他】欢迎使用“座位偏好”设置',
+     '你可以在“个人中心”设置常用校区、自习偏好等。\n系统将优先推荐符合偏好的房间与座位。',
+     'OTHER', 'INFO', 1, '全体学生', 0, 1, DATE_SUB(NOW(), INTERVAL 14 DAY), NULL, NULL);

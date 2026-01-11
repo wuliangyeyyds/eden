@@ -4,6 +4,7 @@ import com.ssrms.common.Result;
 import com.ssrms.controller.dto.LoginDTO;
 import com.ssrms.controller.dto.RegisterDTO;
 import com.ssrms.entity.User;
+import com.ssrms.mapper.ViolationMapper;
 import com.ssrms.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -75,8 +76,17 @@ public class UserController {
         if (user == null) {
             return Result.fail("用户不存在");
         }
+
+        Integer sum = violationMapper.sumUnhandledPenalty(userId);
+        int penalty = (sum == null ? 0 : sum);
+        int credit = Math.max(0, 100 - penalty);
+
+        // ✅不改数据库，只把返回值里的 creditScore 变成动态计算结果
+        user.setCreditScore(credit);
+
         return Result.success(toVO(user));
     }
+
 
     /**
      * 更新个人信息
@@ -178,5 +188,8 @@ public class UserController {
         vo.setLastLoginTime(u.getLastLoginTime());
         return vo;
     }
+
+    @Autowired
+    private ViolationMapper violationMapper;
 
 }

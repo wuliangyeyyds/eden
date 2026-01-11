@@ -4,9 +4,9 @@ server:
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://14.103.95.155:3306/ssrms-db?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
-    username: ssrms-admin
-    password: 8u6NKBb1ubbEyWxBjXda
+    url: jdbc:mysql://你的数据库ip:你的数据库端口/你的数据库名?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: 你的数据库密码
 
 mybatis-plus:
   mapper-locations: classpath*:mapper/*.xml
@@ -18,7 +18,7 @@ ssrms:
 
 coze:
   base-url: "https://api.coze.cn"
-  bot-id: "7531269592158257204"
-  token: "sat_w3Dfmxnsvggf3rgiKm5u2uAzjMrLRXwm8PTN2rT2iaxa0kcxXurcAFMEsY76wRbd"
+  bot-id: "你的 bot-id"
+  token: "你的 coze token"
   connect-timeout-ms: 15000
   read-timeout-ms: 60000

@@ -188,7 +188,7 @@
             </p>
           </div>
           <el-button size="small" @click="handleMarkAllDone">
-            一键标记已读（示例）
+            一键标记已读
           </el-button>
         </div>
 
@@ -234,7 +234,7 @@
                 <el-button size="small" type="success" link @click="handleTodoDone(scope.row)">
                   标记完成
                 </el-button>
-                <el-tooltip content="只是示例，不会真正修改后端数据" placement="top">
+                <el-tooltip content="标记完成仅隐藏本机，不影响后端数据" placement="top">
                   <el-button size="small" type="info" link>详情</el-button>
                 </el-tooltip>
               </div>
@@ -1256,7 +1256,7 @@
 
               <el-form-item v-if="fbAdminDetail && fbAdminDetail.reservationId" label="关联预约">
                 <el-checkbox v-model="fbAdminHandleForm.cancelReservation">
-                  取消该预约（管理员强制取消，仅对“已预约/待签到”状态有效）
+                  取消该预约（强制取消，仅对“已预约/待签到”有效）
                 </el-checkbox>
               </el-form-item>
 
@@ -1406,41 +1406,12 @@ export default {
         reply: '',
         cancelReservation: false
       },
+      // 待办事项（管理员首页：根据统计动态生成）
+      todos: [],
+      // 本地“标记完成”仅做隐藏，不影响后端数据（默认隐藏 6 小时）
+      todoHideHours: 6,
+      todoDismissed: {},
 
-      todos: [
-        {
-          id: 1,
-          type: 'complaint',
-          content: '处理 2 条关于自习室噪音的投诉记录。',
-          from: '投诉处理',
-          time: '2025-12-10 09:20',
-          priority: 'high'
-        },
-        {
-          id: 2,
-          type: 'violation',
-          content: '检查本周连续违约超过 3 次的学生名单。',
-          from: '后台管理',
-          time: '2025-12-10 08:50',
-          priority: 'medium'
-        },
-        {
-          id: 3,
-          type: 'rule',
-          content: '确认期末考试周自习室开放时间与预约上限。',
-          from: '后台管理',
-          time: '2025-12-09 16:10',
-          priority: 'medium'
-        },
-        {
-          id: 4,
-          type: 'system',
-          content: '导出本月预约与签到报表存档。',
-          from: '后台管理',
-          time: '2025-12-09 10:25',
-          priority: 'low'
-        }
-      ],
       latestActivities: [
         { id: 1, text: '张三 预约了 图书馆 401 · 10:00-12:00', type: 'book', typeLabel: '新预约', time: '09:15' },
         { id: 2, text: '李四 在 本部 · 3 楼 301 完成签到', type: 'sign', typeLabel: '已签到', time: '08:05' },
@@ -1672,6 +1643,7 @@ export default {
 
       if (val === 'admin-home') this.loadAdminNoticeHome()
       if (val === 'admin-home') this.loadAdminDashboardHome()
+      if (val === 'admin-home') this.loadAdminHomeTodos()
       if (val === 'admin-reservations') {
         this.loadReservationRoomOptions()
         this.loadAdminReservations(true)
@@ -1693,8 +1665,12 @@ export default {
   },
   created () {
     this.initSeatGrid()
+    this.loadTodoDismissed()
     this.loadAdminNoticeHome()
-    if (this.currentPage === 'admin-home') this.loadAdminDashboardHome()
+    if (this.currentPage === 'admin-home') {
+      this.loadAdminDashboardHome()
+      this.loadAdminHomeTodos()
+    }
     if (this.currentPage === 'admin-reservations') {
       this.loadReservationRoomOptions()
       this.loadAdminReservations(true)
@@ -1762,6 +1738,8 @@ export default {
             } else {
               item.status = p >= 60 ? 'success' : (p >= 40 ? 'warning' : 'exception')
             }
+
+            item.desc = this.buildTrendDesc(key, p)
           }
 
           setTrend('weekReservation', weekReservation)
@@ -2064,14 +2042,135 @@ export default {
       if (p === 'medium') return '中'
       return '低'
     },
+
+    /* ---------- Admin Home: Todos（动态待办） ---------- */
+    loadTodoDismissed () {
+      // 仅用于管理员本机“隐藏待办”，不影响后端数据
+      try {
+        const raw = localStorage.getItem('ssrms_admin_todo_dismissed') || '{}'
+        const obj = JSON.parse(raw)
+        this.todoDismissed = (obj && typeof obj === 'object') ? obj : {}
+        this.cleanTodoDismissed()
+      } catch (e) {
+        this.todoDismissed = {}
+      }
+    },
+    saveTodoDismissed () {
+      try {
+        localStorage.setItem('ssrms_admin_todo_dismissed', JSON.stringify(this.todoDismissed || {}))
+      } catch (e) {
+        //
+      }
+    },
+    cleanTodoDismissed () {
+      const now = Date.now()
+      const map = this.todoDismissed || {}
+      let changed = false
+      Object.keys(map).forEach(k => {
+        if (!map[k] || Number(map[k]) <= now) {
+          delete map[k]
+          changed = true
+        }
+      })
+      if (changed) this.saveTodoDismissed()
+    },
+    isTodoDismissed (id) {
+      this.cleanTodoDismissed()
+      const t = Number((this.todoDismissed || {})[id] || 0)
+      return t > Date.now()
+    },
+    dismissTodo (id, hours) {
+      const h = Number(hours ?? this.todoHideHours ?? 6)
+      const ms = Math.max(0, h) * 60 * 60 * 1000
+      this.todoDismissed = this.todoDismissed || {}
+      this.todoDismissed[id] = Date.now() + ms
+      this.saveTodoDismissed()
+    },
+    nowStr () {
+      const d = new Date()
+      const pad = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    },
+
+    async loadAdminHomeTodos () {
+      // 管理员首页只需要“统计”就能生成待办：投诉处理 + 违约处理
+      await Promise.all([
+        this.loadAdminFeedbackStats(),
+        this.loadAdminReservationStatsForHome()
+      ])
+      this.rebuildTodos()
+    },
+
+    async loadAdminReservationStatsForHome () {
+      // 轻量拉取：只用 stats，不需要 records
+      try {
+        const res = await this.$axios.get('/reservation/admin/page', { params: { page: 1, size: 1 } })
+        if (res && Number(res.code) === 200) {
+          const payload = res.data || {}
+          this.reservationStats = payload.stats || this.reservationStats
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    },
+
+    rebuildTodos () {
+      const items = []
+      const now = this.nowStr()
+
+      // 1) 投诉/建议待处理（来自 feedback stats）
+      const pending = Number(this.fbAdminStats?.pending || 0)
+      const processing = Number(this.fbAdminStats?.processing || 0)
+      const fbTotal = pending + processing
+      if (fbTotal > 0) {
+        items.push({
+          id: 'todo_feedback',
+          type: 'complaint',
+          content: `有 ${fbTotal} 条反馈待处理（待处理 ${pending}，处理中 ${processing}）`,
+          from: '投诉处理',
+          time: now,
+          priority: pending > 0 ? 'high' : 'medium'
+        })
+      }
+
+      // 2) 违约记录待确认/处理（来自 reservation stats.violation）
+      const vio = Number(this.reservationStats?.violation || 0)
+      if (vio > 0) {
+        items.push({
+          id: 'todo_violation',
+          type: 'violation',
+          content: `有 ${vio} 条违约/未签到记录待处理（可补录签到或标记违约）`,
+          from: '预约管理',
+          time: now,
+          priority: vio >= 5 ? 'high' : 'medium'
+        })
+      }
+
+      // 过滤：本地标记完成（隐藏）
+      this.todos = items.filter(it => !this.isTodoDismissed(it.id))
+    },
+
     handleTodoGo (row) {
-      if (row.type === 'complaint') return this.emitChange('admin-complaints')
+      // 快速入口：跳转到对应模块，并预填筛选条件
+      if (row.type === 'complaint') {
+        // 默认只看待处理：fbAdminOnlyPending 本来就是 true
+        return this.emitChange('admin-complaints')
+      }
+      if (row.type === 'violation') {
+        // 直接跳预约管理，并筛选“违约”
+        this.reservationFilters.status = 'violation'
+        return this.emitChange('admin-reservations')
+      }
       return this.emitChange('admin-home')
     },
     handleTodoDone (row) {
+      // 仅隐藏本机待办，不会修改后端数据
+      this.dismissTodo(row.id)
       this.todos = this.todos.filter(t => t.id !== row.id)
     },
     handleMarkAllDone () {
+      // 一键隐藏
+      (this.todos || []).forEach(t => this.dismissTodo(t.id))
       this.todos = []
     },
 
@@ -2877,6 +2976,37 @@ export default {
         violationStrategy: 'day-ban',
         description: '本自习室需保持安静，迟到超过 20 分钟系统将自动释放座位。'
       }
+    },
+
+    buildTrendDesc (key, p) {
+      // 兼容 0（可能是“暂无数据”，也可能是真的 0%，这里文案尽量中性）
+      const pct = Number(p || 0)
+
+      if (key === 'weekReservation') {
+        if (pct === 0) return '本周暂无可统计的完成数据，或预约尚未产生完成记录。'
+        if (pct >= 85) return '完成率很高，整体运行稳定。'
+        if (pct >= 70) return '完成率良好，可关注高峰时段的波动。'
+        if (pct >= 50) return '完成率一般，建议排查取消/未到的主要原因。'
+        return '完成率偏低，建议加强提醒与规则引导。'
+      }
+
+      if (key === 'weekCheckin') {
+        if (pct === 0) return '本周暂无可统计的签到数据，或签到记录尚未产生。'
+        if (pct >= 85) return '签到率优秀，到馆秩序很不错。'
+        if (pct >= 70) return '签到率正常，可在开场前推送提醒进一步提升。'
+        if (pct >= 50) return '签到率偏低，建议强化到馆提醒与补签流程。'
+        return '签到率较低，建议检查签到规则与现场执行情况。'
+      }
+
+      if (key === 'weekViolation') {
+        if (pct === 0) return '本周暂无违约，秩序良好。'
+        if (pct <= 3) return '违约率较低，保持现有提醒即可。'
+        if (pct <= 8) return '违约率略高，可在高峰时段加强提醒。'
+        if (pct <= 15) return '违约率偏高，建议结合信用分/黑名单规则重点处理。'
+        return '违约率较高，建议重点排查未签到与迟到原因并加强管理。'
+      }
+
+      return ''
     }
   }
 }
